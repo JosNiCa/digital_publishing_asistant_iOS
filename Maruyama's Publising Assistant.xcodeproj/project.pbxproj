@@ -10,9 +10,35 @@
 		97C622242F721AEF00429040 /* Maruyama's Publising Assistant.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Maruyama's Publising Assistant.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		97FA7A4B2F7223180067517C /* Exceptions for "Maruyama's Publising Assistant" folder in "Maruyama's Publising Assistant" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				core/utils/extensions/JSONDecoder.swift,
+				data/network/APIClient.swift,
+			);
+			target = 97C622232F721AEF00429040 /* Maruyama's Publising Assistant */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		97FA7A4C2F7223180067517C /* Exceptions for "Maruyama's Publising Assistant" folder in "Copy Bundle Resources" phase from "Maruyama's Publising Assistant" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 97C622222F721AEF00429040 /* Resources */;
+			membershipExceptions = (
+				core/utils/extensions/JSONDecoder.swift,
+				data/network/APIClient.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		97C622262F721AEF00429040 /* Maruyama's Publising Assistant */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				97FA7A4B2F7223180067517C /* Exceptions for "Maruyama's Publising Assistant" folder in "Maruyama's Publising Assistant" target */,
+				97FA7A4C2F7223180067517C /* Exceptions for "Maruyama's Publising Assistant" folder in "Copy Bundle Resources" phase from "Maruyama's Publising Assistant" target */,
+			);
 			path = "Maruyama's Publising Assistant";
 			sourceTree = "<group>";
 		};
