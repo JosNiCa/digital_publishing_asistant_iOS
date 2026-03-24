@@ -7,16 +7,16 @@
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            uuid = "EFB5E714-2613-4E30-A4A4-457CEB885E7E"
+            uuid = "60254678-3F03-4B1B-A139-0386B5683509"
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "Maruyama&apos;s Publising Assistant/data/network/APIClient.swift"
+            filePath = "Maruyama&apos;s Publising Assistant/data/repositories/AuthRepositoryImpl.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "62"
-            endingLineNumber = "62"
-            landmarkName = "request(endpoint:body:requiresAuth:)"
+            startingLineNumber = "16"
+            endingLineNumber = "16"
+            landmarkName = "login(username:password:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

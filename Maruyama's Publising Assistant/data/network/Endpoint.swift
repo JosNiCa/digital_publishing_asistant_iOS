@@ -7,15 +7,24 @@
 
 enum Endpoint {
     case login
+    case me
     
     var path: String {
         switch self {
         case .login:
             return "/api/accounts/mobile/"
+            
+        case .me:
+            return "/api/accounts/me/"
         }
     }
     
     var method: String {
-        return "POST"
+            switch self {
+            case .login:
+                return "POST"
+            case .me:
+                return "GET"
+        }
     }
 }

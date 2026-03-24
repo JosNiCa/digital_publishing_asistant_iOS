@@ -20,9 +20,9 @@ final public class APIClient {
         self.session = session
     }
     
-    func request<T: Decodable, B: Encodable>(
+    func request<T: Decodable>(
         endpoint: Endpoint,
-        body: B? = nil,
+        body: Encodable? = nil,
         requiresAuth: Bool = false
     ) async throws -> T {
         
@@ -57,6 +57,9 @@ final public class APIClient {
             
             // Manejo HTTP
             if httpResponse.statusCode == 401 {
+                await MainActor.run {
+                    SessionManager.shared.handleUnauthorized()
+                }
                 throw APIError.unauthorized
             }
             

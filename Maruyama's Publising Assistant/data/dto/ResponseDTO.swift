@@ -34,6 +34,32 @@ struct DataDTO: Codable {
     }
 }
 
+struct MeResponseDTO: Codable {
+    let ok: Bool
+    let data: MeDataDTO?
+}
+
+struct MeDataDTO: Codable {
+    let user: UserDTO
+    let profile: ProfileDTO
+}; extension MeDataDTO {
+    func toDomain(with token: String) -> AuthSession {
+        return AuthSession(
+            token: token,
+            tokenType: "Bearer",
+            user: User(
+                id: user.id,
+                username: user.username,
+                isAdmin: user.isAdmin
+            ),
+            profile: UserProfile(
+                distributorId: profile.distribuidorId,
+                distributorName: profile.distribuidorNombre
+            )
+        )
+    }
+}
+
 struct UserDTO: Codable {
     let id: Int
     let username: String

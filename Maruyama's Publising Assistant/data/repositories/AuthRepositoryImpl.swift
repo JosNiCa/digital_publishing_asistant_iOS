@@ -50,6 +50,10 @@ final class AuthRepositoryImpl: AuthRepository {
             throw AuthError.server("Missing data")
         }
         
-        return data.toDomain()
+        let session = data.toDomain()
+        
+        SessionManager.shared.save(session: session)
+        
+        return session
     }
 }

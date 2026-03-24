@@ -21,6 +21,7 @@ final class LoginViewModel: ObservableObject {
         self.authRepository = authRepository
     }
     
+    @MainActor
     func login() async {
         isLoading = true
         errorMessage = nil
