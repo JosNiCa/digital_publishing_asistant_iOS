@@ -9,10 +9,10 @@ import SwiftUI
 
 struct LoginView: View {
     
-    @StateObject private var viewModel: LoginViewModel
+    @StateObject private var loginViewModel: LoginViewModel
     
     init(authRepository: AuthRepository) {
-        _viewModel = StateObject(
+        _loginViewModel = StateObject(
             wrappedValue: LoginViewModel(authRepository: authRepository)
         )
     }
@@ -24,14 +24,14 @@ struct LoginView: View {
                 .font(.largeTitle)
                 .bold()
             
-            TextField("Usuario", text: $viewModel.username)
+            TextField("Usuario", text: $loginViewModel.username)
                 .textFieldStyle(.roundedBorder)
                 .autocapitalization(.none)
             
-            SecureField("Contraseña", text: $viewModel.password)
+            SecureField("Contraseña", text: $loginViewModel.password)
                 .textFieldStyle(.roundedBorder)
             
-            if let error = viewModel.errorMessage {
+            if let error = loginViewModel.errorMessage {
                 Text(error)
                     .foregroundColor(.red)
                     .font(.caption)
@@ -39,24 +39,20 @@ struct LoginView: View {
             
             Button(action: {
                 Task {
-                    await viewModel.login()
+                    await loginViewModel.login()
                 }
             }) {
-                if viewModel.isLoading {
+                if loginViewModel.isLoading {
                     ProgressView()
                 } else {
                     Text("Iniciar sesión")
                         .frame(maxWidth: .infinity)
                 }
             }
-            .disabled(viewModel.isLoading)
+            .disabled(loginViewModel.isLoading)
             .buttonStyle(.borderedProminent)
             
         }
         .padding()
     }
-}
-
-#Preview {
-    LoginView()
 }

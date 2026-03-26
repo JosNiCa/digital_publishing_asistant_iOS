@@ -8,6 +8,7 @@
 enum Endpoint {
     case login
     case me
+    case getPhotos
     
     var path: String {
         switch self {
@@ -16,6 +17,9 @@ enum Endpoint {
             
         case .me:
             return "/api/accounts/me/"
+            
+        case .getPhotos:
+            return "/api/media_library/photos/"
         }
     }
     
@@ -24,6 +28,8 @@ enum Endpoint {
             case .login:
                 return "POST"
             case .me:
+                return "GET"
+            case .getPhotos:
                 return "GET"
         }
     }
