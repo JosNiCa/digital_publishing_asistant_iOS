@@ -10,13 +10,19 @@ import SwiftUI
 @main
 struct Maruyama_s_Publising_AssistantApp: App {
     @StateObject private var session = SessionManager.shared
+    
     private let apiClient = APIClient()
+    private let authRepository: AuthRepository
+    
+    init() {
+        self.authRepository = AuthRepositoryImpl(apiClient: apiClient)
+    }
         
     var body: some Scene {
         WindowGroup {
             Group {
                 if session.isLoggedIn {
-                    ContentView()
+                    //ListView()
                 } else {
                     //LoginView()
                 }

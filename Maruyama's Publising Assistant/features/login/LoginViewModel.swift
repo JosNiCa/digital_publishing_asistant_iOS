@@ -12,7 +12,7 @@ final class LoginViewModel: ObservableObject {
     
     @Published var username = ""
     @Published var password = ""
-    @Published var isLoading = false
+    @Published var isLoading : Bool = false
     @Published var errorMessage: String?
     
     private let authRepository: AuthRepository
@@ -23,20 +23,33 @@ final class LoginViewModel: ObservableObject {
     
     @MainActor
     func login() async {
+        guard !username.isEmpty, !password.isEmpty else {
+            errorMessage = "Por favor, ingrese sus credenciales"
+            return
+        }
+        
         isLoading = true
         errorMessage = nil
         
         do {
-            let session = try await authRepository.login(
+            _ = try await authRepository.login(
                 username: username,
                 password: password
             )
             
-            // TODO: guardar token (Keychain)
-            print("Login exitoso:", session.token)
-            
-        } catch {
-            errorMessage = "Credenciales incorrectas"
+        } catch let error as AuthError{
+            switch error {
+            case .invalidCredentials:
+                errorMessage = "Credenciales incorrectas"
+            case .notApproved:
+                errorMessage = "Cuenta no aprobada"
+            case .mustChangePassword:
+                errorMessage = "Debes cambiar tu contraseña"
+            case .server(let string):
+                errorMessage = errorMessage ?? string
+            }
+        }catch {
+            errorMessage = "Error inesperado"
         }
         
         isLoading = false
