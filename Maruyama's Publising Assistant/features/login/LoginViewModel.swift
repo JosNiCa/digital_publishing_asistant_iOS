@@ -10,8 +10,8 @@ import Combine
 @MainActor
 final class LoginViewModel: ObservableObject {
     
-    @Published var username = "iOSDev"
-    @Published var password = "iOSPrueba1"
+    @Published var username = ""
+    @Published var password = ""
     @Published var isLoading : Bool = false
     @Published var errorMessage: String?
     

@@ -25,17 +25,17 @@ struct Maruyama_s_Publising_AssistantApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                // TODO: Temporarily start app on PhotoListView to bypass login while network issue is investigated.
-                // Restore conditional login gate when ready:
-                // if session.isLoggedIn {
-                //     PhotoListView(photoListViewModel: photoListViewModel)
-                // } else {
-                //     LoginView(authRepository: authRepository)
-                // }
-                PhotoListView(photoListViewModel: photoListViewModel)
+                 if session.isLoggedIn {
+                     PhotoListView(photoListViewModel: photoListViewModel)
+                 } else {
+                     LoginView(authRepository: authRepository)
+                 }
+                
             }
             .task {
-                await session.validateSession(apiClient: apiClient)
+                if session.token != nil {
+                    await session.validateSession(apiClient: apiClient)
+                }
             }
         }
     }

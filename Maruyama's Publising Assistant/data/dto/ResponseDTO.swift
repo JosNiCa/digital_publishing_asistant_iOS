@@ -27,8 +27,8 @@ struct DataDTO: Codable {
                 isAdmin: user.isAdmin
             ),
             profile: UserProfile(
-                distributorId: profile.distribuidorId,
-                distributorName: profile.distribuidorNombre
+                distributorId: profile.distribuidorId ?? -1,
+                distributorName: profile.distribuidorNombre ?? "Sin distribuidor"
             )
         )
     }
@@ -53,8 +53,8 @@ struct MeDataDTO: Codable {
                 isAdmin: user.isAdmin
             ),
             profile: UserProfile(
-                distributorId: profile.distribuidorId,
-                distributorName: profile.distribuidorNombre
+                distributorId: profile.distribuidorId ?? -1,
+                distributorName: profile.distribuidorNombre ?? "Sin distribuidor"
             )
         )
     }
@@ -67,8 +67,8 @@ struct UserDTO: Codable {
 }
 
 struct ProfileDTO: Codable {
-    let distribuidorId: Int
-    let distribuidorNombre: String
+    let distribuidorId: Int?
+    let distribuidorNombre: String?
 }
 
 struct ErrorDTO: Codable {

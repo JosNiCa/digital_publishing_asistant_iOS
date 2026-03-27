@@ -55,7 +55,6 @@ final public class APIClient {
                 throw APIError.unknown
             }
             
-            // Manejo HTTP
             if httpResponse.statusCode == 401 {
                 await MainActor.run {
                     SessionManager.shared.handleUnauthorized()
@@ -66,9 +65,13 @@ final public class APIClient {
             do {
                 return try JSONDecoder.apiDecoder.decode(T.self, from: data)
             } catch {
+                print("❌ DECODING ERROR:", error)
+                print("📦 RAW:", String(data: data, encoding: .utf8) ?? "nil")
                 throw APIError.decodingError(error)
             }
-            
+
+        } catch let error as APIError {
+            throw error
         } catch {
             throw APIError.networkError(error)
         }
