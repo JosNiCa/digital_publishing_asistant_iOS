@@ -10,13 +10,14 @@ import SwiftUI
 struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
+    @State private var selectedPhoto: Photo?
     
     init(photoListViewModel: PhotoListViewModel) {
         _viewModel = StateObject(wrappedValue: photoListViewModel)
     }
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             content
                 .navigationTitle("Fotos")
                 .task {
@@ -24,6 +25,9 @@ struct PhotoListView: View {
                 }
                 .refreshable {
                     await viewModel.refresh()
+                }
+                .navigationDestination(item: $selectedPhoto) { photo in
+                    PhotoViewerView(photo: photo)
                 }
         }
     }
@@ -57,6 +61,10 @@ struct PhotoListView: View {
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(viewModel.photos) { photo in
                     PhotoCell(photo: photo)
+                        .onTapGesture {
+                            guard selectedPhoto == nil else { return }
+                            selectedPhoto = photo
+                        }
                 }
             }
             .padding(8)
