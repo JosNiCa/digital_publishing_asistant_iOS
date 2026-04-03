@@ -11,6 +11,8 @@ struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
     @State private var selectedPhoto: Photo?
+    private let distributorRepository = DistributorRepositoryImpl(apiClient: APIClient())
+    private let fusionRepository = FusionRepositoryImpl(apiClient: APIClient())
     
     init(photoListViewModel: PhotoListViewModel) {
         _viewModel = StateObject(wrappedValue: photoListViewModel)
@@ -27,7 +29,11 @@ struct PhotoListView: View {
                     await viewModel.refresh()
                 }
                 .navigationDestination(item: $selectedPhoto) { photo in
-                    PhotoViewerView(photo: photo)
+                    PhotoViewerView(
+                        photo: photo,
+                        distributorRepository: distributorRepository,
+                        fusionRepository: fusionRepository
+                    )
                 }
         }
     }

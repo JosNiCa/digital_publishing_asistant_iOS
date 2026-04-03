@@ -1,3 +1,10 @@
+//
+//  FusionRepositoryImpl.swift
+//  Maruyama's Publising Assistant
+//
+//  Created by LJD Technology on 01/04/26.
+//
+
 final class FusionRepositoryImpl: FusionRepository {
     
     private let apiClient: APIClient
@@ -20,7 +27,7 @@ final class FusionRepositoryImpl: FusionRepository {
         let dto: FusionResponseDTO = try await apiClient.request(
             endpoint: .fusionPreview(photoId: photoId),
             body: body,
-            requiresAuth: true // ⚠️ IMPORTANTE
+            requiresAuth: true
         )
         
         return dto.toDomain()
