@@ -6,6 +6,7 @@
 //
 
 import Combine
+import SwiftUI
 
 @MainActor
 final class PhotoViewerViewModel: ObservableObject {
@@ -14,9 +15,14 @@ final class PhotoViewerViewModel: ObservableObject {
     
     @Published var distributors: [Distributor] = []
     @Published var fusionImageBase64: String?
+    @Published var imageSize: CGSize = .zero
+    
     @Published var selectedDistributorId: Int?
     @Published var selectedCoordinate: Int?
-    @Published var isLoading = false
+    
+    @Published var isLoadingDistributors = false
+    @Published var isApplyngFusion = false
+    
     @Published var errorMessage: String?
 
     private let distributorRepository: DistributorRepository
@@ -34,7 +40,8 @@ final class PhotoViewerViewModel: ObservableObject {
     }
     
     func loadDistributors() async {
-        isLoading = true
+        isLoadingDistributors = true
+        errorMessage = nil
         
         do {
             distributors = try await distributorRepository.fetchDistributors()
@@ -42,14 +49,14 @@ final class PhotoViewerViewModel: ObservableObject {
             errorMessage = "No se pudieron cargar distribuidores"
         }
         
-        isLoading = false
+        isLoadingDistributors = false
     }
     
     func applyFusion() async {
         guard let distributor = selectedDistributorId,
               let coordinate = selectedCoordinate else { return }
         
-        isLoading = true
+        isApplyngFusion = true
         errorMessage = nil
         
         do {
@@ -65,6 +72,6 @@ final class PhotoViewerViewModel: ObservableObject {
             self.errorMessage = "Error al generar la imagen"
         }
         
-        isLoading = false
+        isApplyngFusion = false
     }
 }

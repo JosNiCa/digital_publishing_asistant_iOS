@@ -27,7 +27,6 @@ struct PhotoViewerView: View {
             VStack(spacing: 16) {
                     imageSection
                     distributorSection
-                    coordinateSection
                     actionsSection
                 }
 
@@ -40,57 +39,33 @@ struct PhotoViewerView: View {
     }
     
     private var imageSection: some View {
-        Group {
-            if let base64 = viewModel.fusionImageBase64 {
+        
+        ZStack {
+            
+            imageView
+            
+            GeometryReader { geo in
+                pointsOverlay(viewSize: geo.size)
+            }
+            
+            if viewModel.isApplyngFusion {
+                Color.black.opacity(0.4)
                 
-                let cleanedBase64 = base64
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "data:image/png;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-                
-                if let data = Data(base64Encoded: cleanedBase64) {
-                    
-                    if let uiImage = UIImage(data: data) {
-                        
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFit()
-                        
-                    } else {
-                        Text("❌ UIImage no se pudo crear")
-                            .foregroundColor(.red)
-                    }
-                    
-                } else {
-                    Text("❌ Base64 inválido")
-                        .foregroundColor(.red)
-                }
-                
-            } else {
-                AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                    case .success(let image):
-                        image.resizable().scaledToFit()
-                    case .failure:
-                        Text("Error")
-                    default:
-                        EmptyView()
-                    }
-                }
+                ProgressView("Aplicando logo...")
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(10)
             }
         }
+        .frame(height: 300)
     }
     
     private var distributorSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Selecciona un distribuidor")
         
-            if viewModel.isLoading {
-                ProgressView()
+            if viewModel.isLoadingDistributors {
+                ProgressView("Cargando distribuidores")
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))]) {
                     
@@ -138,27 +113,6 @@ struct PhotoViewerView: View {
         }
     }
     
-    private var coordinateSection: some View {
-        VStack(alignment: .leading) {
-            Text("Selecciona posición")
-            
-            HStack {
-                ForEach([1,2,3], id: \.self) { index in
-                    Text("P\(index)")
-                        .padding()
-                        .background(
-                            viewModel.selectedCoordinate == index
-                            ? Color.green
-                            : Color.gray.opacity(0.2)
-                        )
-                        .onTapGesture {
-                            viewModel.selectedCoordinate = index
-                        }
-                }
-            }
-        }
-    }
-    
     private var actionsSection: some View {
         Button("Aplicar cambios") {
             Task {
@@ -169,5 +123,103 @@ struct PhotoViewerView: View {
             viewModel.selectedDistributorId == nil ||
             viewModel.selectedCoordinate == nil
         )
+    }
+    
+    @ViewBuilder
+    private func pointsOverlay(viewSize: CGSize) -> some View {
+        
+        let originalWidth = viewModel.imageSize.width
+        let originalHeight = viewModel.imageSize.height
+        
+        if originalWidth > 0, originalHeight > 0 {
+            
+        let (scale, xOffset, yOffset): (CGFloat, CGFloat, CGFloat) = {
+            let imageAspect = originalWidth / originalHeight
+            let viewAspect = viewSize.width / viewSize.height
+                
+            if imageAspect > viewAspect {
+                let scale = viewSize.width / originalWidth
+                let scaledHeight = originalHeight * scale
+                return (scale, 0, (viewSize.height - scaledHeight) / 2)
+            } else {
+                let scale = viewSize.height / originalHeight
+                let scaledWidth = originalWidth * scale
+                return (scale, (viewSize.width - scaledWidth) / 2, 0)
+            }
+        }()
+            
+        let points = [
+            (id: 1, x: 594.0, y: 1013.0),
+            (id: 2, x: 1200.0, y: 800.0),
+            (id: 3, x: 2000.0, y: 1500.0)
+        ]
+        
+        ZStack {
+            ForEach(points, id: \.id) { point in
+                
+                let posX = point.x * scale + xOffset
+                let posY = point.y * scale + yOffset
+                    
+                Circle()
+                    .fill(viewModel.selectedCoordinate == point.id ? Color.green : Color.red)
+                    .frame(width: 20, height: 20)
+                    .overlay(
+                        Circle().stroke(Color.white, lineWidth: 2)
+                    )
+                    .shadow(radius: 3)
+                    .position(x: posX, y: posY)
+                    .onTapGesture {
+                        viewModel.selectedCoordinate = point.id
+                    }
+                }
+            }
+            
+        } else {
+            EmptyView()
+        }
+    }
+    
+    @ViewBuilder
+    private var imageView: some View {
+        
+        if let base64 = viewModel.fusionImageBase64 {
+            
+            let cleanedBase64 = base64
+                .replacingOccurrences(of: "\n", with: "")
+                .replacingOccurrences(of: "\r", with: "")
+            
+            if let data = Data(base64Encoded: cleanedBase64),
+               let uiImage = UIImage(data: data) {
+                
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity)
+                    .onAppear {
+                        viewModel.imageSize = uiImage.size
+                    }
+                
+            } else {
+                Text("Error imagen fusionada")
+            }
+            
+        } else {
+            
+            AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .onAppear()
+                case .failure:
+                    Text("Error")
+                default:
+                    EmptyView()
+                }
+            }
+        }
     }
 }
