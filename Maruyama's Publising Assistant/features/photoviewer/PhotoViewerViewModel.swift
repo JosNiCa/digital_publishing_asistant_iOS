@@ -18,6 +18,7 @@ final class PhotoViewerViewModel: ObservableObject {
     @Published var selectedCoordinate: Int?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var shouldNavigateToPreview = false
 
     private let distributorRepository: DistributorRepository
     private let fusionRepository: FusionRepository
@@ -66,5 +67,16 @@ final class PhotoViewerViewModel: ObservableObject {
         }
         
         isLoading = false
+    }
+    
+    func goToPreview() {
+        guard let image = fusionImageBase64,
+              let distributorId = selectedDistributorId,
+              let coordinate = selectedCoordinate else {
+            errorMessage = "Faltan datos para preview"
+            return
+        }
+
+        shouldNavigateToPreview = true
     }
 }

@@ -28,7 +28,32 @@ struct PhotoViewerView: View {
                     imageSection
                     distributorSection
                     coordinateSection
+                HStack(spacing: 12) {
                     actionsSection
+                    Button("Preview") {
+                        viewModel.goToPreview()
+                    }
+                    .disabled(
+                        viewModel.fusionImageBase64 == nil ||
+                        viewModel.selectedDistributorId == nil ||
+                        viewModel.selectedCoordinate == nil
+                    )
+                    .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
+                        if let imageBase64 = viewModel.fusionImageBase64,
+                           let distributorId = viewModel.selectedDistributorId,
+                           let coordinate = viewModel.selectedCoordinate {
+                            PreviewView(
+                                imageBase64: imageBase64,
+                                photoId: viewModel.photo.id,
+                                distributorId: distributorId,
+                                coordinate: coordinate
+                            )
+                        } else {
+                            Text("Faltan datos para la vista de previsualización")
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
                 }
 
                 .padding()
@@ -171,3 +196,4 @@ struct PhotoViewerView: View {
         )
     }
 }
+
