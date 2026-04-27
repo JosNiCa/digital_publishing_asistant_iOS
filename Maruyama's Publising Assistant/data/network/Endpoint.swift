@@ -11,6 +11,7 @@ enum Endpoint {
     case getPhotos
     case getDistributors
     case fusionPreview(photoId: Int)
+    case publishFusion
     
     var path: String {
         switch self {
@@ -28,6 +29,9 @@ enum Endpoint {
             
         case .fusionPreview(let photoId):
             return "api/media_library/fusion/preview/\(photoId)/"
+            
+        case .publishFusion:
+            return "/api/publishing/publicar-fusion/"
         }
     }
     
@@ -42,6 +46,8 @@ enum Endpoint {
             case .getDistributors:
                 return "GET"
             case .fusionPreview:
+                return "POST"
+            case .publishFusion:
                 return "POST"
         }
     }

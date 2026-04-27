@@ -8,38 +8,105 @@
 import SwiftUI
 
 struct PreviewView: View {
-    let imageBase64: String
-    let photoId: Int
-    let distributorId: Int
-    let coordinate: Int
-    
+
+    @StateObject private var viewModel: PreviewViewModel
+
+    init(
+        input: PreviewInput,
+        fusionRepository: FusionRepository,
+        publishingRepository: PublishingRepository
+    ) {
+        _viewModel = StateObject(
+            wrappedValue: PreviewViewModel(
+                input: input,
+                fusionRepository: fusionRepository,
+                publishingRepository: publishingRepository
+            )
+        )
+    }
+
     var body: some View {
         VStack(spacing: 16) {
-            Group {
-                let cleanedBase64 = imageBase64
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "data:image/png;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-                if let data = Data(base64Encoded: cleanedBase64), let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Text("❌ Error al mostrar la imagen base64")
-                        .foregroundColor(.red)
-                }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Photo ID: \(photoId)")
-                Text("Distributor ID: \(distributorId)")
-                Text("Coordinate: \(coordinate)")
-            }
-            .font(.subheadline)
-            .foregroundColor(.secondary)
+
+            contentImage
+            captionInput
+            actionsSection
+
+            Spacer()
         }
         .padding()
         .navigationTitle("Preview")
+    }
+}
+
+private extension PreviewView {
+
+    var contentImage: some View {
+        Group {
+            if let image = viewModel.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .cornerRadius(12)
+            } else {
+                ProgressView("Cargando imagen...")
+            }
+        }
+    }
+}
+
+private extension PreviewView {
+
+    var captionInput: some View {
+        VStack(alignment: .leading, spacing: 8) {
+
+            Text("Caption")
+                .font(.headline)
+
+            TextEditor(text: $viewModel.caption)
+                .frame(height: 120)
+                .padding(8)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
+        }
+    }
+}
+
+private extension PreviewView {
+
+    var actionsSection: some View {
+        VStack(spacing: 12) {
+            
+            if viewModel.isLoading {
+                ProgressView()
+            }
+
+            if let error = viewModel.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+            }
+
+            if let success = viewModel.successMessage {
+                Text(success)
+                    .foregroundColor(.green)
+            }
+
+            HStack(spacing: 12) {
+                
+                Button("Guardar") {
+                    Task {
+                        await viewModel.saveFusion()
+                    }
+                }
+                .buttonStyle(.bordered)
+
+                Button("Publicar") {
+                    Task {
+                        await viewModel.publish()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
     }
 }

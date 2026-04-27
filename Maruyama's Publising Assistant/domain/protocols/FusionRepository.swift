@@ -11,4 +11,10 @@ protocol FusionRepository {
         distributorId: Int,
         coordinate: Int
     ) async throws -> FusionResult
+    
+    func saveFusion(
+        photoId: Int,
+        logoId: Int,
+        coordinate: Int
+    ) async throws -> Int
 }

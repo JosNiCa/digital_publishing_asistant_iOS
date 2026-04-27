@@ -25,9 +25,9 @@ struct PhotoViewerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                    imageSection
-                    distributorSection
-                    coordinateSection
+                imageSection
+                distributorSection
+                coordinateSection
                 HStack(spacing: 12) {
                     actionsSection
                     Button("Preview") {
@@ -38,30 +38,35 @@ struct PhotoViewerView: View {
                         viewModel.selectedDistributorId == nil ||
                         viewModel.selectedCoordinate == nil
                     )
-                    .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
-                        if let imageBase64 = viewModel.fusionImageBase64,
-                           let distributorId = viewModel.selectedDistributorId,
-                           let coordinate = viewModel.selectedCoordinate {
-                            PreviewView(
-                                imageBase64: imageBase64,
-                                photoId: viewModel.photo.id,
-                                distributorId: distributorId,
-                                coordinate: coordinate
-                            )
-                        } else {
-                            Text("Faltan datos para la vista de previsualización")
-                                .foregroundColor(.red)
-                        }
-                    }
                 }
+            }
+            .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
+                if let imageBase64 = viewModel.fusionImageBase64,
+                   let distributorId = viewModel.selectedDistributorId,
+                   let coordinate = viewModel.selectedCoordinate {
+                    
+                    let input = PreviewInput(
+                        imageBase64: imageBase64,
+                        photoId: viewModel.photo.id,
+                        distributorId: distributorId,
+                        coordinate: coordinate,
+                        fusionId: nil
+                    )
+                    
+                    PreviewView(input: input)
+                    
+                } else {
+                    Text("Faltan datos para la vista de previsualización")
+                        .foregroundColor(.red)
                 }
-
-                .padding()
             }
-            .navigationTitle("Detalle")
-            .task {
-                await viewModel.loadDistributors()
-            }
+            
+            .padding()
+        }
+        .navigationTitle("Detalle")
+        .task {
+            await viewModel.loadDistributors()
+        }
     }
     
     private var imageSection: some View {
@@ -196,4 +201,3 @@ struct PhotoViewerView: View {
         )
     }
 }
-
