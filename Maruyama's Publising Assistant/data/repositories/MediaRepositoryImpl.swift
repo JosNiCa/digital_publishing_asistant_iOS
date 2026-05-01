@@ -5,7 +5,6 @@
 //  Created by LJD Technology on 26/03/26.
 //
 
-
 final class MediaRepositoryImpl: MediaRepository {
     private let apiClient: APIClient
     
@@ -20,5 +19,14 @@ final class MediaRepositoryImpl: MediaRepository {
         )
         
         return dtos.map { $0.toDomain() }
+    }
+    
+    func fetchFusions() async throws -> FusionGroups {
+        let response: FusionsResponseDTO = try await apiClient.request(
+            endpoint: .fusionsList,
+            requiresAuth: false
+        )
+        
+        return response.data.toDomain()
     }
 }

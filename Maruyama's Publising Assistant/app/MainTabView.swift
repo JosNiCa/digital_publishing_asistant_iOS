@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
 
     let mediaRepository: MediaRepository
+    private let apiClient = APIClient()
     
     var body: some View {
         TabView {
@@ -28,7 +29,11 @@ struct MainTabView: View {
 
             // MARK: - Historial
             NavigationStack {
-                HistoryView()
+                HistoryView(
+                    mediaRepository: mediaRepository,
+                    fusionRepository: FusionRepositoryImpl(apiClient: apiClient),
+                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient)
+                )
             }
             .tabItem {
                 Label("Historial", systemImage: "clock.fill")
@@ -45,4 +50,3 @@ struct MainTabView: View {
         .tint(.red) // opcional estilo iOS como tu imagen
     }
 }
-
