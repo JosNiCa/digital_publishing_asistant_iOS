@@ -5,7 +5,6 @@
 //  Created by LJD Technology on 30/03/26.
 //
 
-
 struct DistributorDTO: Decodable {
     let id: Int
     let name: String

@@ -56,8 +56,10 @@ final public class APIClient {
             }
             
             if httpResponse.statusCode == 401 {
-                await MainActor.run {
-                    SessionManager.shared.handleUnauthorized()
+                if requiresAuth, SessionManager.shared.token != nil {
+                    await MainActor.run {
+                        SessionManager.shared.handleUnauthorized()
+                    }
                 }
                 throw APIError.unauthorized
             }

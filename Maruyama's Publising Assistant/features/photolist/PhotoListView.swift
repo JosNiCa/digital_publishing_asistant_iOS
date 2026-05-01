@@ -11,11 +11,20 @@ struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
     @State private var selectedPhoto: Photo?
-    private let distributorRepository = DistributorRepositoryImpl(apiClient: APIClient())
-    private let fusionRepository = FusionRepositoryImpl(apiClient: APIClient())
+    @State private var showLogoutConfirm: Bool = false
     
+    private let apiClient: APIClient
+    private let distributorRepository: DistributorRepositoryImpl
+    private let fusionRepository: FusionRepositoryImpl
+    private let publishingRepository: PublishingRepositoryImpl
+        
     init(photoListViewModel: PhotoListViewModel) {
         _viewModel = StateObject(wrappedValue: photoListViewModel)
+        let apiClient = APIClient()
+        self.apiClient = apiClient
+        self.distributorRepository = DistributorRepositoryImpl(apiClient: apiClient)
+        self.fusionRepository = FusionRepositoryImpl(apiClient: apiClient)
+        self.publishingRepository = PublishingRepositoryImpl(apiClient: apiClient)
     }
     
     var body: some View {
@@ -32,8 +41,31 @@ struct PhotoListView: View {
                     PhotoViewerView(
                         photo: photo,
                         distributorRepository: distributorRepository,
-                        fusionRepository: fusionRepository
+                        fusionRepository: fusionRepository,
+                        publishingRepository: publishingRepository,
+                        onFusionCompleted: {
+                            FusionSession.shared.clear()
+                            selectedPhoto = nil
+                        }
                     )
+                }
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            showLogoutConfirm = true
+                        } label: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                        }
+                        .accessibilityLabel("Cerrar sesión")
+                    }
+                }
+                .alert("Cerrar sesión", isPresented: $showLogoutConfirm) {
+                    Button("Cancelar", role: .cancel) {}
+                    Button("Cerrar sesión", role: .destructive) {
+                        SessionManager.shared.logout()
+                    }
+                } message: {
+                    Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
                 }
         }
     }

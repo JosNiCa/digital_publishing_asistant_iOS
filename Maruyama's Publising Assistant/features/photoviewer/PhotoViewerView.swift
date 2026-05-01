@@ -12,7 +12,20 @@ struct PhotoViewerView: View {
     
     @StateObject private var viewModel: PhotoViewerViewModel
     
-    init(photo: Photo, distributorRepository: DistributorRepository, fusionRepository: FusionRepository) {
+    private let fusionRepository: FusionRepository
+    private let publishingRepository: PublishingRepository
+    private let onFusionCompleted: @MainActor () -> Void
+    
+    init(photo: Photo,
+         distributorRepository: DistributorRepository,
+         fusionRepository: FusionRepository,
+         publishingRepository: PublishingRepository,
+         onFusionCompleted: @escaping @MainActor () -> Void = {}
+    ) {
+        self.fusionRepository = fusionRepository
+        self.publishingRepository = publishingRepository
+        self.onFusionCompleted = onFusionCompleted
+        
         _viewModel = StateObject(
             wrappedValue: PhotoViewerViewModel(
                 photo: photo,
@@ -25,9 +38,9 @@ struct PhotoViewerView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                    imageSection
-                    distributorSection
-                    coordinateSection
+                imageSection
+                distributorSection
+                coordinateSection
                 HStack(spacing: 12) {
                     actionsSection
                     Button("Preview") {
@@ -38,30 +51,44 @@ struct PhotoViewerView: View {
                         viewModel.selectedDistributorId == nil ||
                         viewModel.selectedCoordinate == nil
                     )
-                    .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
-                        if let imageBase64 = viewModel.fusionImageBase64,
-                           let distributorId = viewModel.selectedDistributorId,
-                           let coordinate = viewModel.selectedCoordinate {
-                            PreviewView(
-                                imageBase64: imageBase64,
-                                photoId: viewModel.photo.id,
-                                distributorId: distributorId,
-                                coordinate: coordinate
-                            )
-                        } else {
-                            Text("Faltan datos para la vista de previsualización")
-                                .foregroundColor(.red)
-                        }
-                    }
                 }
+            }
+            .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
+                if let imageBase64 = viewModel.fusionImageBase64,
+                   let distributorId = viewModel.selectedDistributorId,
+                   let coordinate = viewModel.selectedCoordinate {
+                    
+                    let input = PreviewInput(
+                        imageBase64: imageBase64,
+                        photoId: viewModel.photo.id,
+                        distributorId: distributorId,
+                        coordinate: coordinate,
+                        fusionId: FusionSession.shared.fusionId
+                    )
+                    
+                    PreviewView(
+                        input: input,
+                        fusionRepository: fusionRepository,
+                        publishingRepository: publishingRepository,
+                        onComplete: onFusionCompleted
+                    )
+                    
+                } else {
+                    Text("Faltan datos para la vista de previsualización")
+                        .foregroundColor(.red)
                 }
-
-                .padding()
             }
-            .navigationTitle("Detalle")
-            .task {
-                await viewModel.loadDistributors()
+            
+            .padding()
+        }
+        .navigationTitle("Detalle")
+        .task {
+            if FusionSession.shared.photoId != nil,
+               FusionSession.shared.photoId != viewModel.photo.id {
+                FusionSession.shared.clear()
             }
+            await viewModel.loadDistributors()
+        }
     }
     
     private var imageSection: some View {
@@ -196,4 +223,3 @@ struct PhotoViewerView: View {
         )
     }
 }
-

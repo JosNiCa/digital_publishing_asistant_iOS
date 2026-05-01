@@ -32,4 +32,30 @@ final class FusionRepositoryImpl: FusionRepository {
         
         return dto.toDomain()
     }
+
+    func saveFusion(
+        photoId: Int,
+        logoId: Int,
+        coordinate: Int
+    ) async throws -> Int {
+        let body = FusionRequestDTO(
+            logo_id: logoId,
+            coordenada: coordinate
+        )
+        
+        let response: SaveFusionResponseDTO = try await apiClient.request(
+            endpoint: .fusionSave(photoId: photoId),
+            body: body,
+            requiresAuth: false
+        )
+        
+        guard response.ok else {
+            throw APIError.serverError(
+                code: nil,
+                message: response.error ?? "Error guardando fusión"
+            )
+        }
+        
+        return response.data.idFusion
+    }
 }
