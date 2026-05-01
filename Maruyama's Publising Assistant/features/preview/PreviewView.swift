@@ -10,12 +10,15 @@ import SwiftUI
 struct PreviewView: View {
 
     @StateObject private var viewModel: PreviewViewModel
+    private let onComplete: @MainActor () -> Void
 
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
-        publishingRepository: PublishingRepository
+        publishingRepository: PublishingRepository,
+        onComplete: @escaping @MainActor () -> Void = {}
     ) {
+        self.onComplete = onComplete
         _viewModel = StateObject(
             wrappedValue: PreviewViewModel(
                 input: input,
@@ -30,6 +33,7 @@ struct PreviewView: View {
 
             contentImage
             captionInput
+            scheduleSection
             actionsSection
 
             Spacer()
@@ -73,6 +77,25 @@ private extension PreviewView {
 }
 
 private extension PreviewView {
+    var scheduleSection: some View {
+        VStack(alignment: .leading) {
+
+            Text("Programar publicación")
+                .font(.headline)
+
+            DatePicker(
+                "Fecha",
+                selection: Binding(
+                    get: { viewModel.scheduledDate ?? Date() },
+                    set: { viewModel.scheduledDate = $0 }
+                ),
+                displayedComponents: [.date, .hourAndMinute]
+            )
+        }
+    }
+}
+
+private extension PreviewView {
 
     var actionsSection: some View {
         VStack(spacing: 12) {
@@ -95,14 +118,18 @@ private extension PreviewView {
                 
                 Button("Guardar") {
                     Task {
-                        await viewModel.saveFusion()
+                        if await viewModel.saveFusion() {
+                            onComplete()
+                        }
                     }
                 }
                 .buttonStyle(.bordered)
 
                 Button("Publicar") {
                     Task {
-                        await viewModel.publish()
+                        if await viewModel.publish() {
+                            onComplete()
+                        }
                     }
                 }
                 .buttonStyle(.borderedProminent)

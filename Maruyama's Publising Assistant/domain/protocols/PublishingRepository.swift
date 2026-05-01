@@ -11,4 +11,6 @@ protocol PublishingRepository {
         caption: String,
         scheduledTime: Int?
     ) async throws
+    
+    func verifyConnection() async throws -> ConnectionStatus
 }

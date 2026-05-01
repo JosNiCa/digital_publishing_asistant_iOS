@@ -32,9 +32,10 @@ final class PreviewViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
     @Published var successMessage: String?
+    @Published var scheduledDate: Date?
 
     // MARK: - Internal State
-    private var fusionId: Int?
+    private(set) var fusionId: Int?
 
     // MARK: - Init
     init(
@@ -64,12 +65,23 @@ final class PreviewViewModel: ObservableObject {
 
         self.image = uiImage
     }
+    
+    private func buildTimestamp() -> Int? {
+        guard let date = scheduledDate else { return nil }
+        return Int(date.timeIntervalSince1970)
+    }
 
     // MARK: - Actions
 
-    func saveFusion() async {
+    func saveFusion() async -> Bool {
         
-        guard !isLoading else { return }
+        guard !isLoading else { return false }
+        
+        if fusionId != nil {
+            successMessage = "La fusión ya fue guardada"
+            FusionSession.shared.clear()
+            return true
+        }
         
         isLoading = true
         errorMessage = nil
@@ -85,16 +97,25 @@ final class PreviewViewModel: ObservableObject {
             )
             
             self.fusionId = id
+            
+            FusionSession.shared.fusionId = id
+            FusionSession.shared.photoId = input.photoId
+            FusionSession.shared.distributorId = input.distributorId
+            FusionSession.shared.coordinate = input.coordinate
+            
             successMessage = "Fusión guardada (ID: \(id))"
+            FusionSession.shared.clear()
+            return true
             
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
     
-    func publish() async {
+    func publish() async -> Bool {
         
-        guard !isLoading else { return }
+        guard !isLoading else { return false }
         
         isLoading = true
         errorMessage = nil
@@ -104,11 +125,11 @@ final class PreviewViewModel: ObservableObject {
         
         guard !caption.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "El caption no puede estar vacío"
-            return
+            return false
         }
         
         do {
-            // 🔴 1. Asegurar que exista fusionId
+            // Asegurar que exista fusionId
             if fusionId == nil {
                 let id = try await fusionRepository.saveFusion(
                     photoId: input.photoId,
@@ -116,25 +137,48 @@ final class PreviewViewModel: ObservableObject {
                     coordinate: input.coordinate
                 )
                 fusionId = id
+                FusionSession.shared.fusionId = id
             }
             
             guard let fusionId else {
-                throw NSError(domain: "", code: -1, userInfo: [
-                    NSLocalizedDescriptionKey: "No se pudo obtener id_fusion"
-                ])
+                throw APIError.serverError(code: nil, message: "No hay fusionId")
             }
             
-            // 🔴 2. Publicar
+            // Validar conexión
+            let connection = try await publishingRepository.verifyConnection()
+            
+            if !connection.isConnected {
+                errorMessage = "No hay conexión con Facebook/Instagram"
+                return false
+            }
+
+            // Construir scheduled_time
+            let timestamp = buildTimestamp()
+            
+            if let date = scheduledDate, date < Date() {
+                errorMessage = "No puedes programar en el pasado"
+                return false
+            }
+            
+            // Publicar
             try await publishingRepository.publishFusion(
                 fusionId: fusionId,
                 caption: caption,
-                scheduledTime: nil
+                scheduledTime: timestamp
             )
             
-            successMessage = "Publicado correctamente"
+            if timestamp != nil {
+                successMessage = "Publicación programada correctamente"
+            } else {
+                successMessage = "Publicado correctamente"
+            }
+            
+            FusionSession.shared.clear()
+            return true
             
         } catch {
             errorMessage = error.localizedDescription
+            return false
         }
     }
 }
