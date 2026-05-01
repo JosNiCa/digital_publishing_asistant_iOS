@@ -14,19 +14,17 @@ struct Maruyama_s_Publising_AssistantApp: App {
     private let apiClient = APIClient()
     private let authRepository: AuthRepository
     private let mediaRepository: MediaRepository
-    private let photoListViewModel: PhotoListViewModel
     
     init() {
         self.authRepository = AuthRepositoryImpl(apiClient: apiClient)
         self.mediaRepository = MediaRepositoryImpl(apiClient: apiClient)
-        self.photoListViewModel = PhotoListViewModel(mediaRepository: mediaRepository)
     }
         
     var body: some Scene {
         WindowGroup {
             Group {
                  if session.isLoggedIn {
-                     PhotoListView(photoListViewModel: photoListViewModel)
+                     MainTabView(mediaRepository: mediaRepository)
                  } else {
                      LoginView(authRepository: authRepository)
                  }
