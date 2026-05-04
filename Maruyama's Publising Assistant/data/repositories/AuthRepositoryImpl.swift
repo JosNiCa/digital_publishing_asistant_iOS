@@ -5,6 +5,8 @@
 //  Created by LJD Technology on 23/03/26.
 //
 
+import Foundation
+
 final class AuthRepositoryImpl: AuthRepository {
     
     private let apiClient: APIClient
@@ -20,11 +22,16 @@ final class AuthRepositoryImpl: AuthRepository {
             password: password
         )
         
-        let response: LoginResponseDTO = try await apiClient.request(
-            endpoint: .login,
-            body: request,
-            requiresAuth: false
-        )
+        let response: LoginResponseDTO
+        do {
+            response = try await apiClient.request(
+                endpoint: .login,
+                body: request,
+                requiresAuth: false
+            )
+        } catch let error as APIError {
+            throw AuthError.server(error.localizedDescription)
+        }
         
         if !response.ok {
             guard let error = response.error else {
@@ -52,7 +59,9 @@ final class AuthRepositoryImpl: AuthRepository {
         
         let session = data.toDomain()
         
-        SessionManager.shared.save(session: session)
+        await MainActor.run {
+            SessionManager.shared.save(session: session)
+        }
         
         return session
     }

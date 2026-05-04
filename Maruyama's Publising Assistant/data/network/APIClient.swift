@@ -35,8 +35,17 @@ final public class APIClient {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
         // Auth
-        if requiresAuth, let token = SessionManager.shared.token {
-            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let auth = await MainActor.run {
+            (
+                token: SessionManager.shared.token,
+                tokenType: SessionManager.shared.tokenType ?? "Bearer"
+            )
+        }
+        if requiresAuth {
+            guard let token = auth.token, !token.isEmpty else {
+                throw APIError.missingToken
+            }
+            request.addValue("\(auth.tokenType) \(token)", forHTTPHeaderField: "Authorization")
         }
         
         // Body
@@ -56,7 +65,7 @@ final public class APIClient {
             }
             
             if httpResponse.statusCode == 401 {
-                if requiresAuth, SessionManager.shared.token != nil {
+                if requiresAuth, auth.token != nil {
                     await MainActor.run {
                         SessionManager.shared.handleUnauthorized()
                     }
