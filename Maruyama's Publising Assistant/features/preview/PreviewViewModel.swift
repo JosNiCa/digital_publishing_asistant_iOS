@@ -9,11 +9,28 @@ import Combine
 import SwiftUI
 
 struct PreviewInput {
-    let imageBase64: String
+    let imageBase64: String?
+    let imageUrl: String?
     let photoId: Int
-    let distributorId: Int
+    let distributorId: Int?
     let coordinate: Int
     let fusionId: Int? 
+    
+    init(
+        imageBase64: String? = nil,
+        imageUrl: String? = nil,
+        photoId: Int,
+        distributorId: Int? = nil,
+        coordinate: Int,
+        fusionId: Int?
+    ) {
+        self.imageBase64 = imageBase64
+        self.imageUrl = imageUrl
+        self.photoId = photoId
+        self.distributorId = distributorId
+        self.coordinate = coordinate
+        self.fusionId = fusionId
+    }
 }
 
 @MainActor
@@ -29,6 +46,7 @@ final class PreviewViewModel: ObservableObject {
     // MARK: - UI State
     @Published var caption: String = ""
     @Published var image: UIImage?
+    @Published var imageUrl: URL?
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
     @Published var successMessage: String?
@@ -54,7 +72,12 @@ final class PreviewViewModel: ObservableObject {
     // MARK: - Private logic
 
     private func decodeImage() {
-        let cleanedBase64 = input.imageBase64
+        guard let imageBase64 = input.imageBase64 else {
+            imageUrl = input.imageUrl.flatMap(URL.init(string:))
+            return
+        }
+        
+        let cleanedBase64 = imageBase64
             .replacingOccurrences(of: "\n", with: "")
         
         guard let data = Data(base64Encoded: cleanedBase64),
@@ -83,6 +106,11 @@ final class PreviewViewModel: ObservableObject {
             return true
         }
         
+        guard let distributorId = input.distributorId else {
+            errorMessage = "Faltan datos para guardar la fusión"
+            return false
+        }
+        
         isLoading = true
         errorMessage = nil
         successMessage = nil
@@ -92,7 +120,7 @@ final class PreviewViewModel: ObservableObject {
         do {
             let id = try await fusionRepository.saveFusion(
                 photoId: input.photoId,
-                logoId: input.distributorId,
+                logoId: distributorId,
                 coordinate: input.coordinate
             )
             
@@ -131,9 +159,14 @@ final class PreviewViewModel: ObservableObject {
         do {
             // Asegurar que exista fusionId
             if fusionId == nil {
+                guard let distributorId = input.distributorId else {
+                    errorMessage = "Faltan datos para publicar la fusión"
+                    return false
+                }
+                
                 let id = try await fusionRepository.saveFusion(
                     photoId: input.photoId,
-                    logoId: input.distributorId,
+                    logoId: distributorId,
                     coordinate: input.coordinate
                 )
                 fusionId = id

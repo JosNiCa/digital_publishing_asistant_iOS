@@ -52,6 +52,23 @@ private extension PreviewView {
                     .resizable()
                     .scaledToFit()
                     .cornerRadius(12)
+            } else if let imageUrl = viewModel.imageUrl {
+                AsyncImage(url: imageUrl) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView("Cargando imagen...")
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .cornerRadius(12)
+                    case .failure:
+                        Text("Error al cargar la imagen")
+                            .foregroundColor(.red)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
             } else {
                 ProgressView("Cargando imagen...")
             }

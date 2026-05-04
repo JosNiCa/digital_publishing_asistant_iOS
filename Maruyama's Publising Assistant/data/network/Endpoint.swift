@@ -14,6 +14,7 @@ enum Endpoint {
     case publishFusion
     case fusionSave(photoId: Int)
     case verifyConnection
+    case fusionsList
     
     var path: String {
         switch self {
@@ -40,6 +41,9 @@ enum Endpoint {
             
         case .verifyConnection:
             return "/api/publishing/conexion/"
+            
+        case .fusionsList:
+            return "/api/media_library/fusions/"
         }
     }
     
@@ -60,6 +64,8 @@ enum Endpoint {
             case .fusionSave:
                 return "POST"
             case .verifyConnection:
+                return "GET"
+            case .fusionsList:
                 return "GET"
         }
     }

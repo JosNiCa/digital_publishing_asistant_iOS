@@ -7,4 +7,6 @@
 
 protocol MediaRepository {
     func fetchPhotos() async throws -> [Photo]
+    
+    func fetchFusions() async throws -> FusionGroups
 }
