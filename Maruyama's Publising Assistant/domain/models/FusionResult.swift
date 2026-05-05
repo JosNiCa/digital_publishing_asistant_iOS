@@ -7,4 +7,7 @@
 
 struct FusionResult {
     let imageBase64: String
+    let x: Int?
+    let y: Int?
+    let coordinate: Int?
 }
