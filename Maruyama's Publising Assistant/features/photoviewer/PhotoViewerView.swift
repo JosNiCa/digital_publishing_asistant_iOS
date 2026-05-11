@@ -41,17 +41,14 @@ struct PhotoViewerView: View {
                 imageSection
                 distributorSection
                 coordinateSection
-                HStack(spacing: 12) {
-                    actionsSection
-                    Button("Preview") {
-                        viewModel.goToPreview()
-                    }
-                    .disabled(
-                        viewModel.fusionImageBase64 == nil ||
-                        viewModel.selectedDistributorId == nil ||
-                        viewModel.selectedCoordinate == nil
-                    )
+                Button("Preview") {
+                    viewModel.goToPreview()
                 }
+                .disabled(
+                    viewModel.fusionImageBase64 == nil ||
+                    viewModel.selectedDistributorId == nil ||
+                    viewModel.selectedCoordinate == nil
+                )
             }
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
@@ -92,49 +89,18 @@ struct PhotoViewerView: View {
     }
     
     private var imageSection: some View {
-        Group {
-            if let base64 = viewModel.fusionImageBase64 {
-                
-                let cleanedBase64 = base64
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "data:image/png;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-                    .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-                
-                if let data = Data(base64Encoded: cleanedBase64) {
-                    
-                    if let uiImage = UIImage(data: data) {
-                        
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFit()
-                        
-                    } else {
-                        Text("❌ UIImage no se pudo crear")
-                            .foregroundColor(.red)
-                    }
-                    
-                } else {
-                    Text("❌ Base64 inválido")
-                        .foregroundColor(.red)
-                }
-                
+        ZStack {
+            if let base64 = viewModel.fusionImageBase64,
+               let uiImage = uiImage(fromBase64: base64) {
+                logoPreviewImage(uiImage)
             } else {
-                AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        ProgressView()
-                    case .success(let image):
-                        image.resizable().scaledToFit()
-                    case .failure:
-                        Text("Error")
-                    default:
-                        EmptyView()
-                    }
-                }
+                remotePhotoImage
             }
         }
+        .overlay(alignment: .topLeading) {
+            positionPointsOverlay
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     
     private var distributorSection: some View {
@@ -182,7 +148,9 @@ struct PhotoViewerView: View {
                         )
                         .cornerRadius(8)
                         .onTapGesture {
-                            viewModel.selectedDistributorId = distributor.id
+                            Task {
+                                await viewModel.selectDistributor(distributor.id)
+                            }
                         }
                     }
                 }
@@ -191,35 +159,111 @@ struct PhotoViewerView: View {
     }
     
     private var coordinateSection: some View {
-        VStack(alignment: .leading) {
-            Text("Selecciona posición")
-            
-            HStack {
-                ForEach([1,2,3], id: \.self) { index in
-                    Text("P\(index)")
-                        .padding()
-                        .background(
-                            viewModel.selectedCoordinate == index
-                            ? Color.green
-                            : Color.gray.opacity(0.2)
-                        )
-                        .onTapGesture {
-                            viewModel.selectedCoordinate = index
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Posición del logo")
+
+            if viewModel.selectedDistributorId == nil {
+                Text("Selecciona un distribuidor para ver las posiciones disponibles")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if viewModel.isLoadingPositions {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Cargando posiciones")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
+            } else if viewModel.positionOptions.isEmpty {
+                Text("No hay posiciones disponibles para esta imagen")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if let selectedCoordinate = viewModel.selectedCoordinate {
+                Text("Posición seleccionada: P\(selectedCoordinate)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text("Toca un punto rojo en la imagen")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
     }
-    
-    private var actionsSection: some View {
-        Button("Aplicar cambios") {
-            Task {
-                await viewModel.applyFusion()
+
+    private var remotePhotoImage: some View {
+        AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
+            switch phase {
+            case .empty:
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 240)
+            case .success(let image):
+                image
+                    .resizable()
+                    .scaledToFit()
+            case .failure:
+                Text("Error")
+                    .frame(maxWidth: .infinity, minHeight: 240)
+            default:
+                EmptyView()
             }
         }
-        .disabled(
-            viewModel.selectedDistributorId == nil ||
-            viewModel.selectedCoordinate == nil
-        )
+    }
+
+    private func logoPreviewImage(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+    }
+
+    private var positionPointsOverlay: some View {
+        GeometryReader { geometry in
+            if let imageSize = viewModel.previewImageSize {
+                ForEach(viewModel.positionOptions) { option in
+                    Button {
+                        viewModel.selectPosition(option)
+                    } label: {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 22, height: 22)
+                            .overlay {
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 3)
+                            }
+                            .shadow(radius: 3)
+                    }
+                    .buttonStyle(.plain)
+                    .position(
+                        x: pointX(option.x, imageWidth: imageSize.width, viewWidth: geometry.size.width),
+                        y: pointY(option.y, imageHeight: imageSize.height, viewHeight: geometry.size.height)
+                    )
+                    .opacity(viewModel.selectedCoordinate == option.id ? 1 : 0.85)
+                }
+            }
+        }
+        .allowsHitTesting(!viewModel.positionOptions.isEmpty)
+    }
+
+    private func pointX(_ x: Int, imageWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
+        guard imageWidth > 0 else { return 0 }
+        return (CGFloat(x) / imageWidth) * viewWidth
+    }
+
+    private func pointY(_ y: Int, imageHeight: CGFloat, viewHeight: CGFloat) -> CGFloat {
+        guard imageHeight > 0 else { return 0 }
+        return (CGFloat(y) / imageHeight) * viewHeight
+    }
+
+    private func uiImage(fromBase64 base64: String) -> UIImage? {
+        let cleanedBase64 = base64
+            .replacingOccurrences(of: "\n", with: "")
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "data:image/png;base64,", with: "")
+            .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
+            .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
+
+        guard let data = Data(base64Encoded: cleanedBase64) else {
+            return nil
+        }
+
+        return UIImage(data: data)
     }
 }

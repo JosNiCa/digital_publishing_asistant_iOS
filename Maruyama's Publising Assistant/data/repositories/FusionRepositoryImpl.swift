@@ -30,7 +30,7 @@ final class FusionRepositoryImpl: FusionRepository {
             requiresAuth: true
         )
         
-        return dto.toDomain()
+        return try dto.toDomain()
     }
 
     func saveFusion(

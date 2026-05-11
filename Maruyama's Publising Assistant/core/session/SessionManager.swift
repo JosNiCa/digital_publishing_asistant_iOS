@@ -14,30 +14,38 @@ final class SessionManager : ObservableObject{
     static let shared = SessionManager()
     
     @Published private(set) var token: String?
+    @Published private(set) var tokenType: String?
     @Published private(set) var isLoggedIn: Bool = false
     
     private enum Keys {
         static let token = "auth_token"
+        static let tokenType = "auth_token_type"
     }
     
     private init() {
         let savedToken = KeychainManager.shared.read(key: Keys.token)
+        let savedTokenType = KeychainManager.shared.read(key: Keys.tokenType)
         self.token = savedToken
+        self.tokenType = savedTokenType
         self.isLoggedIn = savedToken != nil
     }
     
     // MARK: - Save
     func save(session: AuthSession) {
         self.token = session.token
+        self.tokenType = session.tokenType
         self.isLoggedIn = true
         KeychainManager.shared.save(key: Keys.token, value: session.token)
+        KeychainManager.shared.save(key: Keys.tokenType, value: session.tokenType)
     }
     
     // MARK: - Logout
     func logout() {
         token = nil
+        tokenType = nil
         isLoggedIn = false
         KeychainManager.shared.delete(key: Keys.token)
+        KeychainManager.shared.delete(key: Keys.tokenType)
     }
     
     // MARK: - Interceptor
