@@ -12,6 +12,7 @@ struct PhotoListView: View {
     @StateObject private var viewModel: PhotoListViewModel
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
+    @State private var completionResult: FusionCompletionResult?
     
     private let apiClient: APIClient
     private let distributorRepository: DistributorRepositoryImpl
@@ -43,8 +44,9 @@ struct PhotoListView: View {
                         distributorRepository: distributorRepository,
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
-                        onFusionCompleted: {
+                        onFusionCompleted: { result in
                             FusionSession.shared.clear()
+                            completionResult = result
                             selectedPhoto = nil
                         }
                     )
@@ -67,6 +69,19 @@ struct PhotoListView: View {
                 } message: {
                     Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
                 }
+                .alert(
+                    completionResult?.title ?? "",
+                    isPresented: Binding(
+                        get: { completionResult != nil },
+                        set: { if !$0 { completionResult = nil } }
+                    )
+                ) {
+                    Button("Entendido", role: .cancel) {
+                        completionResult = nil
+                    }
+                } message: {
+                    Text(completionResult?.message ?? "")
+                }
         }
     }
     
@@ -88,25 +103,40 @@ struct PhotoListView: View {
         }
     }
     
-    private let columns = [
-        GridItem(.flexible()),
-        GridItem(.flexible()),
-        GridItem(.flexible())
+    private let compactColumns = [
+        GridItem(.flexible(), spacing: 10),
+        GridItem(.flexible(), spacing: 10)
     ]
     
     private var gridView: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 8) {
-                ForEach(viewModel.photos) { photo in
-                    PhotoCell(photo: photo)
-                        .onTapGesture {
-                            guard selectedPhoto == nil else { return }
-                            selectedPhoto = photo
-                        }
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
+                    let photos = photos(for: format)
+
+                    if !photos.isEmpty {
+                        PhotoFormatSection(
+                            title: format.title,
+                            format: format,
+                            photos: photos,
+                            compactColumns: compactColumns,
+                            onSelect: selectPhoto
+                        )
+                    }
                 }
             }
-            .padding(8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
+    }
+
+    private func photos(for format: PhotoFormat) -> [Photo] {
+        viewModel.photos.filter { $0.format == format }
+    }
+
+    private func selectPhoto(_ photo: Photo) {
+        guard selectedPhoto == nil else { return }
+        selectedPhoto = photo
     }
     
     private var emptyView: some View {
@@ -128,9 +158,45 @@ struct PhotoListView: View {
     }
 }
 
+private struct PhotoFormatSection: View {
+    let title: String
+    let format: PhotoFormat
+    let photos: [Photo]
+    let compactColumns: [GridItem]
+    let onSelect: (Photo) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+
+            if format == .horizontal {
+                LazyVStack(spacing: 10) {
+                    ForEach(photos) { photo in
+                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
+                            .onTapGesture {
+                                onSelect(photo)
+                            }
+                    }
+                }
+            } else {
+                LazyVGrid(columns: compactColumns, spacing: 10) {
+                    ForEach(photos) { photo in
+                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
+                            .onTapGesture {
+                                onSelect(photo)
+                            }
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct PhotoCell: View {
     
     let photo: Photo
+    let aspectRatio: Double
     
     var body: some View {
         AsyncImage(url: URL(string: photo.imageUrl)) { phase in
@@ -159,7 +225,8 @@ struct PhotoCell: View {
                 EmptyView()
             }
         }
-        .frame(height: 120)
+        .aspectRatio(aspectRatio, contentMode: .fit)
+        .frame(maxWidth: .infinity)
         .clipped()
         .cornerRadius(8)
     }

@@ -51,6 +51,7 @@ final class PreviewViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var successMessage: String?
     @Published var scheduledDate: Date?
+    @Published var canRetryPublish: Bool = false
 
     // MARK: - Internal State
     private(set) var fusionId: Int?
@@ -114,6 +115,7 @@ final class PreviewViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        canRetryPublish = false
         
         defer { isLoading = false }
         
@@ -149,6 +151,7 @@ final class PreviewViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        canRetryPublish = false
         
         defer { isLoading = false }
         
@@ -172,6 +175,9 @@ final class PreviewViewModel: ObservableObject {
                     caption: captionForRequest()
                 )
                 fusionId = id
+                FusionSession.shared.photoId = input.photoId
+                FusionSession.shared.distributorId = input.distributorId
+                FusionSession.shared.coordinate = input.coordinate
                 FusionSession.shared.fusionId = id
             }
             
@@ -212,7 +218,9 @@ final class PreviewViewModel: ObservableObject {
             return true
             
         } catch {
-            errorMessage = error.localizedDescription
+            FusionSession.shared.clear()
+            canRetryPublish = fusionId != nil
+            errorMessage = publishErrorMessage(from: error)
             return false
         }
     }
@@ -220,5 +228,28 @@ final class PreviewViewModel: ObservableObject {
     private func captionForRequest() -> String? {
         let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    private func publishErrorMessage(from error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .networkError:
+                return "No pudimos confirmar la publicación. Puede ser una falla temporal de Meta o de conexión. Tu fusión sigue en esta pantalla para que puedas intentar publicar de nuevo."
+            case .serverError(_, let message):
+                return "Meta no pudo completar la publicación: \(message). Tu fusión sigue en esta pantalla; intenta nuevamente en unos minutos."
+            case .unauthorized:
+                return "Tu sesión ya no es válida. Inicia sesión nuevamente antes de publicar."
+            default:
+                break
+            }
+        }
+
+        let message = error.localizedDescription
+        if message.localizedCaseInsensitiveContains("timed out")
+            || message.localizedCaseInsensitiveContains("tiempo") {
+            return "La publicación tardó demasiado en responder. Puede que Meta la procese más tarde, pero la app no pudo confirmarlo. Revisa tus publicaciones o intenta de nuevo."
+        }
+
+        return "No pudimos completar la publicación. Tu fusión sigue en esta pantalla para que puedas intentarlo de nuevo."
     }
 }

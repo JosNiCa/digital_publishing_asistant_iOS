@@ -14,13 +14,13 @@ struct PhotoViewerView: View {
     
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
-    private let onFusionCompleted: @MainActor () -> Void
+    private let onFusionCompleted: @MainActor (FusionCompletionResult) -> Void
     
     init(photo: Photo,
          distributorRepository: DistributorRepository,
          fusionRepository: FusionRepository,
          publishingRepository: PublishingRepository,
-         onFusionCompleted: @escaping @MainActor () -> Void = {}
+         onFusionCompleted: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
     ) {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
@@ -55,12 +55,18 @@ struct PhotoViewerView: View {
                    let distributorId = viewModel.selectedDistributorId,
                    let coordinate = viewModel.selectedCoordinate {
                     
+                    let sessionFusionId = FusionSession.shared.fusionId(
+                        matchingPhotoId: viewModel.photo.id,
+                        distributorId: distributorId,
+                        coordinate: coordinate
+                    )
+
                     let input = PreviewInput(
                         imageBase64: imageBase64,
                         photoId: viewModel.photo.id,
                         distributorId: distributorId,
                         coordinate: coordinate,
-                        fusionId: FusionSession.shared.fusionId
+                        fusionId: sessionFusionId
                     )
                     
                     PreviewView(

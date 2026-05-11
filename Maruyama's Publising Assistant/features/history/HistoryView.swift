@@ -44,7 +44,8 @@ struct HistoryView: View {
                         ),
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
-                        onComplete: {
+                        onComplete: { _ in
+                            FusionSession.shared.clear()
                             selectedPendingItem = nil
                             Task {
                                 await viewModel.loadFusions()
