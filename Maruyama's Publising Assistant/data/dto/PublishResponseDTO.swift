@@ -7,5 +7,6 @@
 
 struct PublishResponseDTO: Decodable {
     let success: Bool
-    let message: String
+    let scheduled: Bool?
+    let message: String?
 }

@@ -8,4 +8,11 @@
 struct FusionRequestDTO: Encodable {
     let logo_id: Int
     let coordenada: Int
+    let caption: String?
+
+    init(logoId: Int, coordenada: Int, caption: String? = nil) {
+        self.logo_id = logoId
+        self.coordenada = coordenada
+        self.caption = caption
+    }
 }

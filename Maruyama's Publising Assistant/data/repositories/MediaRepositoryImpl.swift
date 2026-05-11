@@ -27,6 +27,13 @@ final class MediaRepositoryImpl: MediaRepository {
             requiresAuth: false
         )
         
-        return response.data.toDomain()
+        guard response.ok, let data = response.data else {
+            throw APIError.serverError(
+                code: nil,
+                message: response.error ?? "Error cargando fusiones"
+            )
+        }
+
+        return data.toDomain()
     }
 }

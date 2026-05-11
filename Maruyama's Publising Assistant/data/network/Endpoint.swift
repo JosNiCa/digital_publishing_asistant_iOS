@@ -28,10 +28,10 @@ enum Endpoint {
             return "/api/media_library/photos/"
             
         case .getDistributors:
-            return "api/media_library/distributors/"
+            return "/api/media_library/distributors/"
             
         case .fusionPreview(let photoId):
-            return "api/media_library/fusion/preview/\(photoId)/"
+            return "/api/media_library/fusion/preview/\(photoId)/"
             
         case .publishFusion:
             return "/api/publishing/publicar-fusion/"

@@ -121,7 +121,8 @@ final class PreviewViewModel: ObservableObject {
             let id = try await fusionRepository.saveFusion(
                 photoId: input.photoId,
                 logoId: distributorId,
-                coordinate: input.coordinate
+                coordinate: input.coordinate,
+                caption: captionForRequest()
             )
             
             self.fusionId = id
@@ -167,7 +168,8 @@ final class PreviewViewModel: ObservableObject {
                 let id = try await fusionRepository.saveFusion(
                     photoId: input.photoId,
                     logoId: distributorId,
-                    coordinate: input.coordinate
+                    coordinate: input.coordinate,
+                    caption: captionForRequest()
                 )
                 fusionId = id
                 FusionSession.shared.fusionId = id
@@ -213,5 +215,10 @@ final class PreviewViewModel: ObservableObject {
             errorMessage = error.localizedDescription
             return false
         }
+    }
+
+    private func captionForRequest() -> String? {
+        let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
     }
 }

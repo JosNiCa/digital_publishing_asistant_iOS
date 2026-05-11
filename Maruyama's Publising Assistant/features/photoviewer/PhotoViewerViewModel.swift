@@ -88,7 +88,8 @@ final class PhotoViewerViewModel: ObservableObject {
             let result = try await fusionRepository.applyFusion(
                 photoId: photo.id,
                 distributorId: distributor,
-                coordinate: coordinate
+                coordinate: coordinate,
+                caption: nil
             )
             
             self.fusionImageBase64 = result.imageBase64
@@ -131,12 +132,16 @@ final class PhotoViewerViewModel: ObservableObject {
         var options: [LogoPositionOption] = []
         var firstImageSize: CGSize?
 
-        for coordinate in 1...3 {
+        let availableCoordinates = photo.coordinates.map(\.id)
+        let coordinateIds = availableCoordinates.isEmpty ? Array(1...3) : availableCoordinates
+
+        for coordinate in coordinateIds {
             do {
                 let result = try await fusionRepository.applyFusion(
                     photoId: photo.id,
                     distributorId: distributorId,
-                    coordinate: coordinate
+                    coordinate: coordinate,
+                    caption: nil
                 )
 
                 guard let x = result.x,
