@@ -13,6 +13,7 @@ struct Photo: Identifiable, Hashable {
     let width: Int?
     let height: Int?
     let serverFormat: String?
+    let platform: String?
     let origin: String?
     let createdAt: String?
     let isInUse: Bool?
@@ -27,6 +28,7 @@ struct Photo: Identifiable, Hashable {
         width: Int? = nil,
         height: Int? = nil,
         serverFormat: String? = nil,
+        platform: String? = nil,
         origin: String? = nil,
         createdAt: String? = nil,
         isInUse: Bool? = nil,
@@ -40,6 +42,7 @@ struct Photo: Identifiable, Hashable {
         self.width = width
         self.height = height
         self.serverFormat = serverFormat
+        self.platform = platform
         self.origin = origin
         self.createdAt = createdAt
         self.isInUse = isInUse
@@ -113,7 +116,71 @@ enum PhotoFormat: String, CaseIterable {
     }
 }
 
+enum PublishingPlatform: String, CaseIterable, Identifiable {
+    case all
+    case instagram
+    case facebook
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "Todas"
+        case .instagram:
+            return "Instagram"
+        case .facebook:
+            return "Facebook"
+        }
+    }
+
+    var helperText: String {
+        switch self {
+        case .all:
+            return ""
+        case .instagram:
+            return "Muestra imágenes marcadas por backend para Instagram."
+        case .facebook:
+            return "Muestra imágenes marcadas por backend para Facebook."
+        }
+    }
+}
+
 extension Photo {
+    func isCompatible(with platform: PublishingPlatform) -> Bool {
+        guard platform != .all else {
+            return true
+        }
+
+        if let destinationPlatform {
+            return destinationPlatform == platform
+        }
+
+        switch platform {
+        case .all:
+            return true
+        case .instagram:
+            return [.semiVertical, .vertical].contains(format)
+        case .facebook:
+            return [.horizontal, .square].contains(format)
+        }
+    }
+
+    var destinationPlatform: PublishingPlatform? {
+        guard let platform = platform?.lowercased() else {
+            return nil
+        }
+
+        switch platform {
+        case "instagram":
+            return .instagram
+        case "facebook":
+            return .facebook
+        default:
+            return nil
+        }
+    }
+
     var createdDate: Date? {
         guard let createdAt else {
             return nil

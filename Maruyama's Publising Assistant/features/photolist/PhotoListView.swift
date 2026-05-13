@@ -20,6 +20,7 @@ struct PhotoListView: View {
     @State private var selectedStates: Set<String> = []
     @State private var coordinateFilter: PhotoCoordinateFilter = .all
     @State private var contentFilter: PhotoContentFilter = .all
+    @State private var platformFilter: PublishingPlatform = .all
     @State private var sortOrder: PhotoSortOrder = .newest
     @State private var usesStartDate = false
     @State private var usesEndDate = false
@@ -161,6 +162,7 @@ struct PhotoListView: View {
                 || selectedStates.contains(photo.state ?? "")
             let matchesCoordinates: Bool
             let matchesContent: Bool
+            let matchesPlatform = photo.isCompatible(with: platformFilter)
             let matchesStartDate: Bool
             let matchesEndDate: Bool
 
@@ -203,6 +205,7 @@ struct PhotoListView: View {
                 && matchesState
                 && matchesCoordinates
                 && matchesContent
+                && matchesPlatform
                 && matchesStartDate
                 && matchesEndDate
         }
@@ -268,6 +271,25 @@ struct PhotoListView: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Plataforma")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                Picker("Plataforma", selection: $platformFilter) {
+                    ForEach(PublishingPlatform.allCases) { platform in
+                        Text(platform.title).tag(platform)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if platformFilter != .all {
+                    Text(platformFilter.helperText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Contenido")
@@ -391,6 +413,7 @@ struct PhotoListView: View {
         return selectedFormats.count
             + selectedOrigins.count
             + (contentFilter == .all ? 0 : 1)
+            + (platformFilter == .all ? 0 : 1)
             + (sortOrder == .newest ? 0 : 1)
             + adminFilterCount
     }
@@ -443,6 +466,7 @@ struct PhotoListView: View {
         selectedStates = []
         coordinateFilter = .all
         contentFilter = .all
+        platformFilter = .all
         sortOrder = .newest
         usesStartDate = false
         usesEndDate = false
