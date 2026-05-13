@@ -10,13 +10,21 @@ import SwiftUI
 struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
+    @ObservedObject private var session = SessionManager.shared
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
     @State private var completionResult: FusionCompletionResult?
     @State private var isShowingFilters = false
     @State private var selectedFormats: Set<PhotoFormat> = []
+    @State private var selectedOrigins: Set<String> = []
+    @State private var selectedStates: Set<String> = []
     @State private var coordinateFilter: PhotoCoordinateFilter = .all
+    @State private var contentFilter: PhotoContentFilter = .all
     @State private var sortOrder: PhotoSortOrder = .newest
+    @State private var usesStartDate = false
+    @State private var usesEndDate = false
+    @State private var startDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1)) ?? Date()
+    @State private var endDate = Date()
     
     private let apiClient: APIClient
     private let distributorRepository: DistributorRepositoryImpl
@@ -147,7 +155,14 @@ struct PhotoListView: View {
     private var filteredPhotos: [Photo] {
         let photos = viewModel.photos.filter { photo in
             let matchesFormat = selectedFormats.isEmpty || selectedFormats.contains(photo.format)
+            let matchesOrigin = selectedOrigins.isEmpty
+                || selectedOrigins.contains(photo.origin ?? "")
+            let matchesState = selectedStates.isEmpty
+                || selectedStates.contains(photo.state ?? "")
             let matchesCoordinates: Bool
+            let matchesContent: Bool
+            let matchesStartDate: Bool
+            let matchesEndDate: Bool
 
             switch coordinateFilter {
             case .all:
@@ -158,14 +173,53 @@ struct PhotoListView: View {
                 matchesCoordinates = photo.coordinates.isEmpty
             }
 
-            return matchesFormat && matchesCoordinates
+            switch contentFilter {
+            case .all:
+                matchesContent = true
+            case .solo:
+                matchesContent = photo.isInUse == false
+            case .inUse:
+                matchesContent = photo.isInUse == true
+            }
+
+            if usesStartDate {
+                matchesStartDate = photo.createdDate.map { $0 >= Calendar.current.startOfDay(for: startDate) } ?? false
+            } else {
+                matchesStartDate = true
+            }
+
+            if usesEndDate {
+                let endOfDay = Calendar.current.date(
+                    byAdding: DateComponents(day: 1, second: -1),
+                    to: Calendar.current.startOfDay(for: endDate)
+                ) ?? endDate
+                matchesEndDate = photo.createdDate.map { $0 <= endOfDay } ?? false
+            } else {
+                matchesEndDate = true
+            }
+
+            return matchesFormat
+                && matchesOrigin
+                && matchesState
+                && matchesCoordinates
+                && matchesContent
+                && matchesStartDate
+                && matchesEndDate
         }
 
         switch sortOrder {
         case .newest:
-            return photos
+            return photos.sorted { lhs, rhs in
+                guard let lhsDate = lhs.createdDate else { return false }
+                guard let rhsDate = rhs.createdDate else { return true }
+                return lhsDate > rhsDate
+            }
         case .oldest:
-            return photos.reversed()
+            return photos.sorted { lhs, rhs in
+                guard let lhsDate = lhs.createdDate else { return false }
+                guard let rhsDate = rhs.createdDate else { return true }
+                return lhsDate < rhsDate
+            }
         }
     }
 
@@ -216,6 +270,29 @@ struct PhotoListView: View {
             .pickerStyle(.segmented)
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("Contenido")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                Picker("Contenido", selection: $contentFilter) {
+                    ForEach(PhotoContentFilter.allCases) { filter in
+                        Text(filter.title).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if !availableOrigins.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Origen")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+
+                    horizontalChips(availableOrigins, selected: selectedOrigins, toggle: toggleOrigin)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Formato")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.secondary)
@@ -234,17 +311,61 @@ struct PhotoListView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Coordenadas")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
+            if session.isAdmin {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Fecha de creación")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
 
-                Picker("Coordenadas", selection: $coordinateFilter) {
-                    ForEach(PhotoCoordinateFilter.allCases) { filter in
-                        Text(filter.title).tag(filter)
+                    Toggle("Desde", isOn: $usesStartDate)
+                        .font(.subheadline)
+
+                    if usesStartDate {
+                        DatePicker(
+                            "Desde",
+                            selection: $startDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
+                    }
+
+                    Toggle("Hasta", isOn: $usesEndDate)
+                        .font(.subheadline)
+
+                    if usesEndDate {
+                        DatePicker(
+                            "Hasta",
+                            selection: $endDate,
+                            displayedComponents: [.date]
+                        )
+                        .datePickerStyle(.compact)
+                        .labelsHidden()
                     }
                 }
-                .pickerStyle(.segmented)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Coordenadas")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+
+                    Picker("Coordenadas", selection: $coordinateFilter) {
+                        ForEach(PhotoCoordinateFilter.allCases) { filter in
+                            Text(filter.title).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                if !availableStates.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Estado")
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(.secondary)
+
+                        horizontalChips(availableStates, selected: selectedStates, toggle: toggleState)
+                    }
+                }
             }
 
             if activeFilterCount > 0 {
@@ -260,9 +381,18 @@ struct PhotoListView: View {
     }
 
     private var activeFilterCount: Int {
-        selectedFormats.count
-        + (coordinateFilter == .all ? 0 : 1)
-        + (sortOrder == .newest ? 0 : 1)
+        let adminFilterCount = session.isAdmin
+            ? selectedStates.count
+                + (coordinateFilter == .all ? 0 : 1)
+                + (usesStartDate ? 1 : 0)
+                + (usesEndDate ? 1 : 0)
+            : 0
+
+        return selectedFormats.count
+            + selectedOrigins.count
+            + (contentFilter == .all ? 0 : 1)
+            + (sortOrder == .newest ? 0 : 1)
+            + adminFilterCount
     }
 
     private var emptyFilteredView: some View {
@@ -291,10 +421,67 @@ struct PhotoListView: View {
         }
     }
 
+    private func toggleOrigin(_ origin: String) {
+        if selectedOrigins.contains(origin) {
+            selectedOrigins.remove(origin)
+        } else {
+            selectedOrigins.insert(origin)
+        }
+    }
+
+    private func toggleState(_ state: String) {
+        if selectedStates.contains(state) {
+            selectedStates.remove(state)
+        } else {
+            selectedStates.insert(state)
+        }
+    }
+
     private func clearFilters() {
         selectedFormats = []
+        selectedOrigins = []
+        selectedStates = []
         coordinateFilter = .all
+        contentFilter = .all
         sortOrder = .newest
+        usesStartDate = false
+        usesEndDate = false
+    }
+
+    private var availableOrigins: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.origin) })).sorted()
+    }
+
+    private var availableStates: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.state) })).sorted()
+    }
+
+    private func valueIfPresent(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+
+        return value
+    }
+
+    private func horizontalChips(
+        _ values: [String],
+        selected: Set<String>,
+        toggle: @escaping (String) -> Void
+    ) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(values, id: \.self) { value in
+                    FilterChip(
+                        title: value.capitalized,
+                        isSelected: selected.contains(value)
+                    ) {
+                        toggle(value)
+                    }
+                }
+            }
+        }
     }
     
     private var emptyView: some View {
@@ -347,6 +534,25 @@ private enum PhotoCoordinateFilter: String, CaseIterable, Identifiable {
             return "Con"
         case .withoutCoordinates:
             return "Sin"
+        }
+    }
+}
+
+private enum PhotoContentFilter: String, CaseIterable, Identifiable {
+    case all
+    case solo
+    case inUse
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "Todo"
+        case .solo:
+            return "Solo"
+        case .inUse:
+            return "En uso"
         }
     }
 }

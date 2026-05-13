@@ -8,7 +8,7 @@
 enum Endpoint {
     case login
     case me
-    case getPhotos(page: Int, pageSize: Int)
+    case getPhotos(page: Int, pageSize: Int, includeAllStates: Bool)
     case getDistributors
     case fusionPreview(photoId: Int)
     case fusionDetail(fusionId: Int)
@@ -25,8 +25,9 @@ enum Endpoint {
         case .me:
             return "/api/accounts/me/"
             
-        case .getPhotos(let page, let pageSize):
-            return "/api/media_library/photos/?page=\(page)&page_size=\(pageSize)"
+        case .getPhotos(let page, let pageSize, let includeAllStates):
+            let state = includeAllStates ? "&estado=todas" : ""
+            return "/api/media_library/photos/?page=\(page)&page_size=\(pageSize)\(state)"
             
         case .getDistributors:
             return "/api/media_library/distributors/"

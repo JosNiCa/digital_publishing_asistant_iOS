@@ -5,6 +5,8 @@
 //  Created by LJD Technology on 26/03/26.
 //
 
+import Foundation
+
 struct Photo: Identifiable, Hashable {
     let id: Int
     let imageUrl: String
@@ -112,6 +114,14 @@ enum PhotoFormat: String, CaseIterable {
 }
 
 extension Photo {
+    var createdDate: Date? {
+        guard let createdAt else {
+            return nil
+        }
+
+        return Self.dateFormatter.date(from: createdAt)
+    }
+
     var format: PhotoFormat {
         if let serverFormat {
             switch serverFormat.lowercased() {
@@ -145,4 +155,12 @@ extension Photo {
             return .vertical
         }
     }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }

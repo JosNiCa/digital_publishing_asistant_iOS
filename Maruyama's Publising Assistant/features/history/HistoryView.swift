@@ -11,6 +11,7 @@ struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
     @State private var selectedFilter: PublicationFilter = .pendientes
     @State private var selectedPendingItem: FusionItem?
+    @State private var completionResult: FusionCompletionResult?
     
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
@@ -39,8 +40,9 @@ struct HistoryView: View {
                         item: item,
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
-                        onComplete: { _ in
+                        onComplete: { result in
                             FusionSession.shared.clear()
+                            completionResult = result
                             selectedPendingItem = nil
                             Task {
                                 await viewModel.loadFusions()
@@ -48,6 +50,19 @@ struct HistoryView: View {
                         }
                     )
                 }
+        }
+        .alert(
+            completionResult?.title ?? "",
+            isPresented: Binding(
+                get: { completionResult != nil },
+                set: { if !$0 { completionResult = nil } }
+            )
+        ) {
+            Button("Entendido", role: .cancel) {
+                completionResult = nil
+            }
+        } message: {
+            Text(completionResult?.message ?? "")
         }
         .task {
             await viewModel.loadFusions()

@@ -16,36 +16,44 @@ final class SessionManager : ObservableObject{
     @Published private(set) var token: String?
     @Published private(set) var tokenType: String?
     @Published private(set) var isLoggedIn: Bool = false
+    @Published private(set) var isAdmin: Bool = false
     
     private enum Keys {
         static let token = "auth_token"
         static let tokenType = "auth_token_type"
+        static let isAdmin = "auth_is_admin"
     }
     
     private init() {
         let savedToken = KeychainManager.shared.read(key: Keys.token)
         let savedTokenType = KeychainManager.shared.read(key: Keys.tokenType)
+        let savedIsAdmin = KeychainManager.shared.read(key: Keys.isAdmin) == "true"
         self.token = savedToken
         self.tokenType = savedTokenType
         self.isLoggedIn = savedToken != nil
+        self.isAdmin = savedIsAdmin
     }
     
     // MARK: - Save
     func save(session: AuthSession) {
         self.token = session.token
         self.tokenType = session.tokenType
+        self.isAdmin = session.user.isAdmin
         self.isLoggedIn = true
         KeychainManager.shared.save(key: Keys.token, value: session.token)
         KeychainManager.shared.save(key: Keys.tokenType, value: session.tokenType)
+        KeychainManager.shared.save(key: Keys.isAdmin, value: session.user.isAdmin ? "true" : "false")
     }
     
     // MARK: - Logout
     func logout() {
         token = nil
         tokenType = nil
+        isAdmin = false
         isLoggedIn = false
         KeychainManager.shared.delete(key: Keys.token)
         KeychainManager.shared.delete(key: Keys.tokenType)
+        KeychainManager.shared.delete(key: Keys.isAdmin)
     }
     
     // MARK: - Interceptor
