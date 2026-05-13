@@ -224,30 +224,34 @@ struct PhotoViewerView: View {
         GeometryReader { geometry in
             if let imageSize = viewModel.previewImageSize {
                 ForEach(viewModel.positionOptions) { option in
-                    Button {
-                        viewModel.selectPosition(option)
-                    } label: {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 22, height: 22)
-                            .overlay {
-                                Circle()
-                                    .stroke(Color.white, lineWidth: 3)
-                            }
-                            .shadow(radius: 3)
+                    if viewModel.selectedCoordinate != option.id {
+                        Button {
+                            viewModel.selectPosition(option)
+                        } label: {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 22, height: 22)
+                                .overlay {
+                                    Circle()
+                                        .stroke(Color.white, lineWidth: 3)
+                                }
+                                .shadow(radius: 3)
+                        }
+                        .buttonStyle(.plain)
+                        .position(
+                            x: pointX(option.x, imageWidth: imageSize.width, viewWidth: geometry.size.width),
+                            y: pointY(option.y, imageHeight: imageSize.height, viewHeight: geometry.size.height)
+                        )
+                        .opacity(0.85)
+                        .accessibilityLabel("Posición \(option.id)")
+                        .transition(.opacity)
                     }
-                    .buttonStyle(.plain)
-                    .position(
-                        x: pointX(option.x, imageWidth: imageSize.width, viewWidth: geometry.size.width),
-                        y: pointY(option.y, imageHeight: imageSize.height, viewHeight: geometry.size.height)
-                    )
-                    .opacity(viewModel.selectedCoordinate == option.id ? 1 : 0.85)
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: viewModel.selectedCoordinate)
         .allowsHitTesting(!viewModel.positionOptions.isEmpty)
     }
-
     private func pointX(_ x: Int, imageWidth: CGFloat, viewWidth: CGFloat) -> CGFloat {
         guard imageWidth > 0 else { return 0 }
         return (CGFloat(x) / imageWidth) * viewWidth

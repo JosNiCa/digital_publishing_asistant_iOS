@@ -17,21 +17,29 @@ final class SessionManager : ObservableObject{
     @Published private(set) var tokenType: String?
     @Published private(set) var isLoggedIn: Bool = false
     @Published private(set) var isAdmin: Bool = false
+    @Published private(set) var distributorId: Int?
+    @Published private(set) var distributorName: String?
     
     private enum Keys {
         static let token = "auth_token"
         static let tokenType = "auth_token_type"
         static let isAdmin = "auth_is_admin"
+        static let distributorId = "auth_distributor_id"
+        static let distributorName = "auth_distributor_name"
     }
     
     private init() {
         let savedToken = KeychainManager.shared.read(key: Keys.token)
         let savedTokenType = KeychainManager.shared.read(key: Keys.tokenType)
         let savedIsAdmin = KeychainManager.shared.read(key: Keys.isAdmin) == "true"
+        let savedDistributorId = KeychainManager.shared.read(key: Keys.distributorId).flatMap(Int.init)
+        let savedDistributorName = KeychainManager.shared.read(key: Keys.distributorName)
         self.token = savedToken
         self.tokenType = savedTokenType
         self.isLoggedIn = savedToken != nil
         self.isAdmin = savedIsAdmin
+        self.distributorId = savedDistributorId
+        self.distributorName = savedDistributorName
     }
     
     // MARK: - Save
@@ -39,10 +47,18 @@ final class SessionManager : ObservableObject{
         self.token = session.token
         self.tokenType = session.tokenType
         self.isAdmin = session.user.isAdmin
+        self.distributorId = session.profile.distributorId > 0 ? session.profile.distributorId : nil
+        self.distributorName = session.profile.distributorName
         self.isLoggedIn = true
         KeychainManager.shared.save(key: Keys.token, value: session.token)
         KeychainManager.shared.save(key: Keys.tokenType, value: session.tokenType)
         KeychainManager.shared.save(key: Keys.isAdmin, value: session.user.isAdmin ? "true" : "false")
+        if let distributorId {
+            KeychainManager.shared.save(key: Keys.distributorId, value: String(distributorId))
+        } else {
+            KeychainManager.shared.delete(key: Keys.distributorId)
+        }
+        KeychainManager.shared.save(key: Keys.distributorName, value: session.profile.distributorName)
     }
     
     // MARK: - Logout
@@ -50,10 +66,14 @@ final class SessionManager : ObservableObject{
         token = nil
         tokenType = nil
         isAdmin = false
+        distributorId = nil
+        distributorName = nil
         isLoggedIn = false
         KeychainManager.shared.delete(key: Keys.token)
         KeychainManager.shared.delete(key: Keys.tokenType)
         KeychainManager.shared.delete(key: Keys.isAdmin)
+        KeychainManager.shared.delete(key: Keys.distributorId)
+        KeychainManager.shared.delete(key: Keys.distributorName)
     }
     
     // MARK: - Interceptor
