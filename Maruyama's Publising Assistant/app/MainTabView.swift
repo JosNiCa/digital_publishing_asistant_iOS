@@ -41,7 +41,9 @@ struct MainTabView: View {
 
             // MARK: - Conexiones (placeholder)
             NavigationStack {
-                ConnectionsView()
+                ConnectionsView(
+                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient)
+                )
             }
             .tabItem {
                 Label("Conexión", systemImage: "link")

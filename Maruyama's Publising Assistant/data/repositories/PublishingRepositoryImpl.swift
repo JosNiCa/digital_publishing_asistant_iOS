@@ -46,11 +46,23 @@ final class PublishingRepositoryImpl: PublishingRepository {
         )
 
         if response.success == false {
-            return ConnectionStatus(isConnected: false)
+            return ConnectionStatus(
+                isConnected: false,
+                message: response.message
+            )
         }
 
+        let facebookConnected = response.facebookConnected ?? false
+        let instagramConnected = response.instagramConnected ?? false
+
         return ConnectionStatus(
-            isConnected: (response.facebookConnected ?? false) || (response.instagramConnected ?? false)
+            isConnected: facebookConnected || instagramConnected,
+            facebookConnected: facebookConnected,
+            instagramConnected: instagramConnected,
+            facebookPageId: response.facebookPageId,
+            instagramUserId: response.instagramUserId,
+            userId: response.userId,
+            message: response.message
         )
     }
 }
