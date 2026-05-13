@@ -10,6 +10,13 @@ struct Photo: Identifiable, Hashable {
     let imageUrl: String
     let width: Int?
     let height: Int?
+    let serverFormat: String?
+    let origin: String?
+    let createdAt: String?
+    let isInUse: Bool?
+    let state: String?
+    let formatDisplay: String?
+    let productName: String?
     let coordinates: [PhotoCoordinate]
 
     init(
@@ -17,12 +24,26 @@ struct Photo: Identifiable, Hashable {
         imageUrl: String,
         width: Int? = nil,
         height: Int? = nil,
+        serverFormat: String? = nil,
+        origin: String? = nil,
+        createdAt: String? = nil,
+        isInUse: Bool? = nil,
+        state: String? = nil,
+        formatDisplay: String? = nil,
+        productName: String? = nil,
         coordinates: [PhotoCoordinate] = []
     ) {
         self.id = id
         self.imageUrl = imageUrl
         self.width = width
         self.height = height
+        self.serverFormat = serverFormat
+        self.origin = origin
+        self.createdAt = createdAt
+        self.isInUse = isInUse
+        self.state = state
+        self.formatDisplay = formatDisplay
+        self.productName = productName
         self.coordinates = coordinates
     }
 }
@@ -55,6 +76,25 @@ enum PhotoFormat: String, CaseIterable {
         }
     }
 
+    var filterTitle: String {
+        switch self {
+        case .horizontal:
+            return "Horizontal"
+        case .square:
+            return "Cuadrado"
+        case .semiVertical:
+            return "Semivertical"
+        case .vertical:
+            return "Vertical"
+        case .unknown:
+            return "Sin formato"
+        }
+    }
+
+    static var filterableCases: [PhotoFormat] {
+        [.horizontal, .square, .semiVertical, .vertical, .unknown]
+    }
+
     var displayAspectRatio: Double {
         switch self {
         case .horizontal:
@@ -73,6 +113,21 @@ enum PhotoFormat: String, CaseIterable {
 
 extension Photo {
     var format: PhotoFormat {
+        if let serverFormat {
+            switch serverFormat.lowercased() {
+            case "horizontal":
+                return .horizontal
+            case "cuadrado", "square":
+                return .square
+            case "semivertical", "semi_vertical", "semi-vertical":
+                return .semiVertical
+            case "vertical":
+                return .vertical
+            default:
+                break
+            }
+        }
+
         guard let width, let height, height > 0 else {
             return .unknown
         }

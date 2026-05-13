@@ -13,12 +13,23 @@ final class MediaRepositoryImpl: MediaRepository {
     }
     
     func fetchPhotos() async throws -> [Photo] {
-        let dtos: [PhotoDTO] = try await apiClient.request(
-            endpoint: .getPhotos,
-            requiresAuth: false
-        )
-        
-        return dtos.map { $0.toDomain() }
+        var page = 1
+        var photos: [Photo] = []
+
+        while true {
+            let response: PhotosResponseDTO = try await apiClient.request(
+                endpoint: .getPhotos(page: page, pageSize: 100),
+                requiresAuth: false
+            )
+
+            photos.append(contentsOf: response.results.map { $0.toDomain() })
+
+            guard response.next != nil else {
+                return photos
+            }
+
+            page += 1
+        }
     }
     
     func fetchFusions() async throws -> FusionGroups {

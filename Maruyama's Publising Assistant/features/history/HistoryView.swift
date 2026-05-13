@@ -35,13 +35,8 @@ struct HistoryView: View {
             content
                 .navigationTitle("Publicaciones")
                 .navigationDestination(item: $selectedPendingItem) { item in
-                    PreviewView(
-                        input: PreviewInput(
-                            imageUrl: item.thumbnailUrl,
-                            photoId: item.photoId,
-                            coordinate: item.coordenada,
-                            fusionId: item.id
-                        ),
+                    FusionDetailPreviewView(
+                        item: item,
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
                         onComplete: { _ in
@@ -56,6 +51,72 @@ struct HistoryView: View {
         }
         .task {
             await viewModel.loadFusions()
+        }
+    }
+}
+
+private struct FusionDetailPreviewView: View {
+    let item: FusionItem
+    let fusionRepository: FusionRepository
+    let publishingRepository: PublishingRepository
+    let onComplete: @MainActor (FusionCompletionResult) -> Void
+
+    @State private var input: PreviewInput?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Group {
+            if let input {
+                PreviewView(
+                    input: input,
+                    fusionRepository: fusionRepository,
+                    publishingRepository: publishingRepository,
+                    onComplete: onComplete
+                )
+            } else if let errorMessage {
+                VStack(spacing: 12) {
+                    Text(errorMessage)
+                        .foregroundColor(.secondary)
+
+                    Button("Continuar con miniatura") {
+                        input = fallbackInput
+                    }
+                }
+                .padding()
+            } else {
+                ProgressView("Cargando fusión...")
+            }
+        }
+        .task {
+            await loadDetail()
+        }
+    }
+
+    private var fallbackInput: PreviewInput {
+        PreviewInput(
+            imageUrl: item.thumbnailUrl,
+            photoId: item.photoId,
+            coordinate: item.coordenada,
+            fusionId: item.id,
+            caption: item.caption
+        )
+    }
+
+    private func loadDetail() async {
+        guard input == nil, errorMessage == nil else { return }
+
+        do {
+            let detail = try await fusionRepository.fetchFusionDetail(fusionId: item.id)
+            input = PreviewInput(
+                imageBase64: detail.imageBase64,
+                photoId: detail.photoId,
+                distributorId: detail.distributorId,
+                coordinate: detail.coordinate,
+                fusionId: item.id,
+                caption: detail.caption
+            )
+        } catch {
+            errorMessage = "No pudimos cargar la imagen completa de esta fusión."
         }
     }
 }

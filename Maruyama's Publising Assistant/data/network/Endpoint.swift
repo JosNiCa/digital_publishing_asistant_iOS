@@ -8,9 +8,10 @@
 enum Endpoint {
     case login
     case me
-    case getPhotos
+    case getPhotos(page: Int, pageSize: Int)
     case getDistributors
     case fusionPreview(photoId: Int)
+    case fusionDetail(fusionId: Int)
     case publishFusion
     case fusionSave(photoId: Int)
     case verifyConnection
@@ -24,14 +25,17 @@ enum Endpoint {
         case .me:
             return "/api/accounts/me/"
             
-        case .getPhotos:
-            return "/api/media_library/photos/"
+        case .getPhotos(let page, let pageSize):
+            return "/api/media_library/photos/?page=\(page)&page_size=\(pageSize)"
             
         case .getDistributors:
             return "/api/media_library/distributors/"
             
         case .fusionPreview(let photoId):
             return "/api/media_library/fusion/preview/\(photoId)/"
+
+        case .fusionDetail(let fusionId):
+            return "/api/media_library/fusion/\(fusionId)/"
             
         case .publishFusion:
             return "/api/publishing/publicar-fusion/"
@@ -59,6 +63,8 @@ enum Endpoint {
                 return "GET"
             case .fusionPreview:
                 return "POST"
+            case .fusionDetail:
+                return "GET"
             case .publishFusion:
                 return "POST"
             case .fusionSave:

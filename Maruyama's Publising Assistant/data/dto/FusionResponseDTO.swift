@@ -33,3 +33,36 @@ struct FusionDataDTO: Decodable {
     let y: Int?
     let coordenada: Int?
 }
+
+struct FusionDetailResponseDTO: Decodable {
+    let ok: Bool
+    let data: FusionDetailDTO?
+    let error: String?
+}
+
+struct FusionDetailDTO: Decodable {
+    let image: String
+    let photoId: Int
+    let distributorId: Int
+    let coordenada: Int
+    let caption: String?
+}
+
+extension FusionDetailResponseDTO {
+    func toDomain() throws -> FusionDetail {
+        guard ok, let data else {
+            throw APIError.serverError(
+                code: nil,
+                message: error ?? "Error cargando la fusión"
+            )
+        }
+
+        return FusionDetail(
+            imageBase64: data.image,
+            photoId: data.photoId,
+            distributorId: data.distributorId,
+            coordinate: data.coordenada,
+            caption: data.caption
+        )
+    }
+}

@@ -15,6 +15,7 @@ struct PreviewInput {
     let distributorId: Int?
     let coordinate: Int
     let fusionId: Int? 
+    let caption: String?
     
     init(
         imageBase64: String? = nil,
@@ -22,7 +23,8 @@ struct PreviewInput {
         photoId: Int,
         distributorId: Int? = nil,
         coordinate: Int,
-        fusionId: Int?
+        fusionId: Int?,
+        caption: String? = nil
     ) {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
@@ -30,6 +32,7 @@ struct PreviewInput {
         self.distributorId = distributorId
         self.coordinate = coordinate
         self.fusionId = fusionId
+        self.caption = caption
     }
 }
 
@@ -66,6 +69,7 @@ final class PreviewViewModel: ObservableObject {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
         self.fusionId = input.fusionId
+        self.caption = input.caption ?? ""
         
         self.decodeImage()
     }

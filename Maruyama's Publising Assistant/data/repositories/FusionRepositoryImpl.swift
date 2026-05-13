@@ -62,4 +62,13 @@ final class FusionRepositoryImpl: FusionRepository {
         
         return try response.fusionId()
     }
+
+    func fetchFusionDetail(fusionId: Int) async throws -> FusionDetail {
+        let response: FusionDetailResponseDTO = try await apiClient.request(
+            endpoint: .fusionDetail(fusionId: fusionId),
+            requiresAuth: false
+        )
+
+        return try response.toDomain()
+    }
 }

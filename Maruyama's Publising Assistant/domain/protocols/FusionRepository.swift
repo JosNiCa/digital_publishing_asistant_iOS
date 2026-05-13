@@ -19,4 +19,6 @@ protocol FusionRepository {
         coordinate: Int,
         caption: String?
     ) async throws -> Int
+
+    func fetchFusionDetail(fusionId: Int) async throws -> FusionDetail
 }
