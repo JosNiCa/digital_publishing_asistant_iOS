@@ -20,6 +20,18 @@ final class DistributorRepositoryImpl: DistributorRepository {
             requiresAuth: false
         )
         
-        return dtos.map { $0.toDomain() }
+        let distributors = dtos.map { $0.toDomain() }
+        let session = await MainActor.run {
+            (
+                isAdmin: SessionManager.shared.isAdmin,
+                distributorId: SessionManager.shared.distributorId
+            )
+        }
+
+        guard !session.isAdmin, let distributorId = session.distributorId else {
+            return distributors
+        }
+
+        return distributors.filter { $0.id == distributorId }
     }
 }

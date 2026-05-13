@@ -34,7 +34,7 @@ final class PublishingRepositoryImpl: PublishingRepository {
         guard response.success else {
             throw APIError.serverError(
                 code: nil,
-                message: response.message
+                message: response.message ?? "No se pudo publicar."
             )
         }
     }
@@ -45,8 +45,24 @@ final class PublishingRepositoryImpl: PublishingRepository {
             requiresAuth: true
         )
 
+        if response.success == false {
+            return ConnectionStatus(
+                isConnected: false,
+                message: response.message
+            )
+        }
+
+        let facebookConnected = response.facebookConnected ?? false
+        let instagramConnected = response.instagramConnected ?? false
+
         return ConnectionStatus(
-            isConnected: response.facebookConnected || response.instagramConnected
+            isConnected: facebookConnected || instagramConnected,
+            facebookConnected: facebookConnected,
+            instagramConnected: instagramConnected,
+            facebookPageId: response.facebookPageId,
+            instagramUserId: response.instagramUserId,
+            userId: response.userId,
+            message: response.message
         )
     }
 }

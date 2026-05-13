@@ -9,19 +9,20 @@ import Foundation
 
 struct FusionsResponseDTO: Decodable {
     let ok: Bool
-    let data: FusionsDataDTO
+    let data: FusionsDataDTO?
+    let error: String?
 }
 
 struct FusionsDataDTO: Decodable {
-    let pendientes: [FusionItemDTO]
-    let agendadas: [FusionItemDTO]
-    let publicadas: [FusionItemDTO]
+    let pendientes: [FusionItemDTO]?
+    let agendadas: [FusionItemDTO]?
+    let publicadas: [FusionItemDTO]?
 }; extension FusionsDataDTO {
     func toDomain() -> FusionGroups {
         FusionGroups(
-            pendientes: pendientes.map { $0.toDomain() },
-            agendadas: agendadas.map { $0.toDomain() },
-            publicadas: publicadas.map { $0.toDomain() }
+            pendientes: (pendientes ?? []).map { $0.toDomain() },
+            agendadas: (agendadas ?? []).map { $0.toDomain() },
+            publicadas: (publicadas ?? []).map { $0.toDomain() }
         )
     }
 }
@@ -31,6 +32,7 @@ struct FusionItemDTO: Decodable {
     let photoId: Int
     let distributorName: String
     let coordenada: Int
+    let caption: String?
     let fechaPublicacion: String?
     let thumbnailUrl: String
     let productoNombre: String
@@ -42,6 +44,7 @@ struct FusionItemDTO: Decodable {
             photoId: photoId,
             distributorName: distributorName,
             coordenada: coordenada,
+            caption: caption,
             fechaPublicacion: fechaPublicacion.flatMap(Self.parseDate),
             thumbnailUrl: thumbnailUrl,
             productoNombre: productoNombre,

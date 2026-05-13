@@ -63,14 +63,18 @@ final public class APIClient {
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.unknown
             }
-            
-            if httpResponse.statusCode == 401 {
-                if requiresAuth, auth.token != nil {
-                    await MainActor.run {
-                        SessionManager.shared.handleUnauthorized()
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401 {
+                    if requiresAuth, auth.token != nil {
+                        await MainActor.run {
+                            SessionManager.shared.handleUnauthorized()
+                        }
                     }
+                    throw APIError.unauthorized
                 }
-                throw APIError.unauthorized
+
+                throw Self.apiError(from: data)
             }
             
             do {
@@ -86,5 +90,36 @@ final public class APIClient {
         } catch {
             throw APIError.networkError(error)
         }
+    }
+
+    private static func apiError(from data: Data) -> APIError {
+        guard
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return APIError.unknown
+        }
+
+        if let error = object["error"] as? [String: Any] {
+            return APIError.serverError(
+                code: error["code"] as? String,
+                message: error["message"] as? String ?? "Error del servidor"
+            )
+        }
+
+        if let message = object["message"] as? String {
+            return APIError.serverError(
+                code: object["code"] as? String,
+                message: message
+            )
+        }
+
+        if let error = object["error"] as? String {
+            return APIError.serverError(
+                code: object["code"] as? String,
+                message: error
+            )
+        }
+
+        return APIError.unknown
     }
 }

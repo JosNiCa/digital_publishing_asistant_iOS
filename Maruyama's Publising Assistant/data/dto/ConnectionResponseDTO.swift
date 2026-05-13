@@ -6,6 +6,12 @@
 //
 
 struct ConnectionResponseDTO: Decodable {
-    let facebookConnected: Bool
-    let instagramConnected: Bool
+    let success: Bool?
+    let facebookConnected: Bool?
+    let instagramConnected: Bool?
+    let facebookPageId: String?
+    let instagramUserId: String?
+    let userId: Int?
+    let error: String?
+    let message: String?
 }

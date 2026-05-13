@@ -11,3 +11,11 @@ struct FusionResult {
     let y: Int?
     let coordinate: Int?
 }
+
+struct FusionDetail {
+    let imageBase64: String
+    let photoId: Int
+    let distributorId: Int
+    let coordinate: Int
+    let caption: String?
+}

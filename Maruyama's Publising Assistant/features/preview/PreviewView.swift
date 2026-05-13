@@ -7,16 +7,44 @@
 
 import SwiftUI
 
+enum FusionCompletionResult {
+    case saved
+    case published
+    case scheduled
+
+    var title: String {
+        switch self {
+        case .saved:
+            return "Fusión guardada"
+        case .published:
+            return "Publicación enviada"
+        case .scheduled:
+            return "Publicación programada"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .saved:
+            return "La fusión quedó guardada y puedes verla en el historial."
+        case .published:
+            return "La publicación se envió correctamente."
+        case .scheduled:
+            return "La publicación quedó programada correctamente."
+        }
+    }
+}
+
 struct PreviewView: View {
 
     @StateObject private var viewModel: PreviewViewModel
-    private let onComplete: @MainActor () -> Void
+    private let onComplete: @MainActor (FusionCompletionResult) -> Void
 
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
         publishingRepository: PublishingRepository,
-        onComplete: @escaping @MainActor () -> Void = {}
+        onComplete: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
     ) {
         self.onComplete = onComplete
         _viewModel = StateObject(
@@ -136,7 +164,7 @@ private extension PreviewView {
                 Button("Guardar") {
                     Task {
                         if await viewModel.saveFusion() {
-                            onComplete()
+                            onComplete(.saved)
                         }
                     }
                 }
@@ -145,11 +173,17 @@ private extension PreviewView {
                 Button("Publicar") {
                     Task {
                         if await viewModel.publish() {
-                            onComplete()
+                            onComplete(viewModel.scheduledDate == nil ? .published : .scheduled)
                         }
                     }
                 }
                 .buttonStyle(.borderedProminent)
+            }
+
+            if viewModel.canRetryPublish {
+                Text("La fusión se mantiene aquí. Antes de reintentar, revisa si la publicación apareció en Meta para evitar duplicarla.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
     }

@@ -9,12 +9,16 @@ protocol FusionRepository {
     func applyFusion(
         photoId: Int,
         distributorId: Int,
-        coordinate: Int
+        coordinate: Int,
+        caption: String?
     ) async throws -> FusionResult
     
     func saveFusion(
         photoId: Int,
         logoId: Int,
-        coordinate: Int
+        coordinate: Int,
+        caption: String?
     ) async throws -> Int
+
+    func fetchFusionDetail(fusionId: Int) async throws -> FusionDetail
 }

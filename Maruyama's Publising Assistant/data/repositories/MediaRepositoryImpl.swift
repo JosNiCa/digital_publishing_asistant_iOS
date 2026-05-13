@@ -13,12 +13,26 @@ final class MediaRepositoryImpl: MediaRepository {
     }
     
     func fetchPhotos() async throws -> [Photo] {
-        let dtos: [PhotoDTO] = try await apiClient.request(
-            endpoint: .getPhotos,
-            requiresAuth: false
-        )
-        
-        return dtos.map { $0.toDomain() }
+        var page = 1
+        var photos: [Photo] = []
+        let isAdmin = await MainActor.run {
+            SessionManager.shared.isAdmin
+        }
+
+        while true {
+            let response: PhotosResponseDTO = try await apiClient.request(
+                endpoint: .getPhotos(page: page, pageSize: 100, includeAllStates: isAdmin),
+                requiresAuth: isAdmin
+            )
+
+            photos.append(contentsOf: response.results.map { $0.toDomain() })
+
+            guard response.next != nil else {
+                return photos
+            }
+
+            page += 1
+        }
     }
     
     func fetchFusions() async throws -> FusionGroups {
@@ -27,6 +41,13 @@ final class MediaRepositoryImpl: MediaRepository {
             requiresAuth: false
         )
         
-        return response.data.toDomain()
+        guard response.ok, let data = response.data else {
+            throw APIError.serverError(
+                code: nil,
+                message: response.error ?? "Error cargando fusiones"
+            )
+        }
+
+        return data.toDomain()
     }
 }

@@ -16,18 +16,20 @@ final class FusionRepositoryImpl: FusionRepository {
     func applyFusion(
         photoId: Int,
         distributorId: Int,
-        coordinate: Int
+        coordinate: Int,
+        caption: String? = nil
     ) async throws -> FusionResult {
         
         let body = FusionRequestDTO(
-            logo_id: distributorId,
-            coordenada: coordinate
+            logoId: distributorId,
+            coordenada: coordinate,
+            caption: caption
         )
         
         let dto: FusionResponseDTO = try await apiClient.request(
             endpoint: .fusionPreview(photoId: photoId),
             body: body,
-            requiresAuth: true
+            requiresAuth: false
         )
         
         return try dto.toDomain()
@@ -36,11 +38,13 @@ final class FusionRepositoryImpl: FusionRepository {
     func saveFusion(
         photoId: Int,
         logoId: Int,
-        coordinate: Int
+        coordinate: Int,
+        caption: String? = nil
     ) async throws -> Int {
         let body = FusionRequestDTO(
-            logo_id: logoId,
-            coordenada: coordinate
+            logoId: logoId,
+            coordenada: coordinate,
+            caption: caption
         )
         
         let response: SaveFusionResponseDTO = try await apiClient.request(
@@ -56,6 +60,15 @@ final class FusionRepositoryImpl: FusionRepository {
             )
         }
         
-        return response.data.idFusion
+        return try response.fusionId()
+    }
+
+    func fetchFusionDetail(fusionId: Int) async throws -> FusionDetail {
+        let response: FusionDetailResponseDTO = try await apiClient.request(
+            endpoint: .fusionDetail(fusionId: fusionId),
+            requiresAuth: false
+        )
+
+        return try response.toDomain()
     }
 }

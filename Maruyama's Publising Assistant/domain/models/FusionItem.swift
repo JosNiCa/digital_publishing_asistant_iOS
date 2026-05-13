@@ -12,6 +12,7 @@ struct FusionItem: Identifiable, Hashable {
     let photoId: Int
     let distributorName: String
     let coordenada: Int
+    let caption: String?
     let fechaPublicacion: Date?
     let thumbnailUrl: String
     let productoNombre: String
