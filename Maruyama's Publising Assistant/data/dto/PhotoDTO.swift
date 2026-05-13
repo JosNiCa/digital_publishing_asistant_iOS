@@ -42,6 +42,7 @@ struct PhotoDTO: Decodable {
     let width: Int?
     let height: Int?
     let formato: String?
+    let platform: String?
     let origen: String?
     let fechaCarga: String?
     let enUso: Bool?
@@ -57,6 +58,7 @@ struct PhotoDTO: Decodable {
         case width
         case height
         case formato
+        case platform
         case origen
         case fechaCarga
         case fechaCargaSnake = "fecha_carga"
@@ -78,6 +80,7 @@ struct PhotoDTO: Decodable {
         self.width = try container.decodeIfPresent(Int.self, forKey: .width)
         self.height = try container.decodeIfPresent(Int.self, forKey: .height)
         self.formato = try container.decodeIfPresent(String.self, forKey: .formato)
+        self.platform = try container.decodeIfPresent(String.self, forKey: .platform)
         self.origen = try container.decodeIfPresent(String.self, forKey: .origen)
         self.fechaCarga = try container.decodeIfPresent(String.self, forKey: .fechaCarga)
             ?? container.decodeIfPresent(String.self, forKey: .fechaCargaSnake)
@@ -99,6 +102,7 @@ extension PhotoDTO {
             width: width,
             height: height,
             serverFormat: formato,
+            platform: platform,
             origin: origen,
             createdAt: fechaCarga,
             isInUse: enUso,
