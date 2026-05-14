@@ -45,6 +45,8 @@ struct PhotoListView: View {
         NavigationStack {
             content
                 .navigationTitle("Fotos")
+                .navigationBarTitleDisplayMode(.large)
+                .appScreenBackground()
                 .task {
                     await viewModel.loadPhotos()
                 }
@@ -61,6 +63,15 @@ struct PhotoListView: View {
                             FusionSession.shared.clear()
                             completionResult = result
                             selectedPhoto = nil
+                        },
+                        onBackgroundPublishStarted: {
+                            selectedPhoto = nil
+                        },
+                        onBackgroundPublishFinished: { _ in
+                            FusionSession.shared.clear()
+                            Task {
+                                await viewModel.refresh()
+                            }
                         }
                     )
                 }
@@ -70,6 +81,7 @@ struct PhotoListView: View {
                             showLogoutConfirm = true
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundStyle(AppColors.brand)
                         }
                         .accessibilityLabel("Cerrar sesión")
                     }
@@ -102,7 +114,7 @@ struct PhotoListView: View {
     private var content: some View {
         
         if viewModel.isLoading && viewModel.photos.isEmpty {
-            ProgressView()
+            ProgressView("Cargando fotos...")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             
         } else if let error = viewModel.errorMessage {
@@ -124,6 +136,7 @@ struct PhotoListView: View {
     private var gridView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
+                gallerySummary
                 filterHeader
 
                 if isShowingFilters {
@@ -149,8 +162,10 @@ struct PhotoListView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 28)
         }
+        .background(AppColors.canvas)
     }
 
     private var filteredPhotos: [Photo] {
@@ -236,31 +251,74 @@ struct PhotoListView: View {
     }
 
     private var filterHeader: some View {
-        HStack {
+        HStack(spacing: 12) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isShowingFilters.toggle()
                 }
             } label: {
-                Label("Filtros", systemImage: "line.3.horizontal.decrease.circle")
-                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 8) {
+                    Image(systemName: isShowingFilters ? "slider.horizontal.3" : "line.3.horizontal.decrease.circle")
+                    Text("Filtros")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.ink)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppColors.elevated)
+                .clipShape(Capsule())
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
             if activeFilterCount > 0 {
-                Text("\(activeFilterCount)")
-                    .font(.caption.weight(.bold))
-                    .foregroundColor(.white)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(Color.accentColor))
+                StatusBadge(
+                    text: "\(activeFilterCount) activos",
+                    systemImage: "checkmark.circle.fill",
+                    tint: AppColors.brand
+                )
             }
 
             Spacer()
 
             Text("\(filteredPhotos.count) fotos")
-                .font(.caption)
+                .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
         }
+    }
+
+    private var gallerySummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Biblioteca lista")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Selecciona una imagen y prueba logos con posiciones disponibles antes de publicar.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                Image(systemName: "photo.stack.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 48, height: 48)
+                    .background(AppColors.brand.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            HStack(spacing: 8) {
+                StatusBadge(text: "\(viewModel.photos.count) totales", systemImage: "photo.on.rectangle", tint: AppColors.softInk)
+
+                if activeFilterCount > 0 {
+                    StatusBadge(text: "\(filteredPhotos.count) visibles", systemImage: "eye.fill", tint: AppColors.brand)
+                }
+            }
+        }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var filterPanel: some View {
@@ -397,9 +455,7 @@ struct PhotoListView: View {
                 .font(.caption.weight(.semibold))
             }
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var activeFilterCount: Int {
@@ -419,21 +475,14 @@ struct PhotoListView: View {
     }
 
     private var emptyFilteredView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.title2)
-                .foregroundColor(.secondary)
-
-            Text("No hay fotos con esos filtros")
-                .font(.subheadline.weight(.semibold))
-
-            Button("Limpiar filtros") {
-                clearFilters()
-            }
-            .font(.caption.weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        EmptyStateView(
+            title: "No hay fotos con esos filtros",
+            message: "Prueba con otra plataforma, fecha o formato para ampliar la búsqueda.",
+            systemImage: "line.3.horizontal.decrease.circle",
+            actionTitle: "Limpiar filtros",
+            action: clearFilters
+        )
+        .appCard(cornerRadius: 22, padding: 0)
     }
 
     private func toggleFormat(_ format: PhotoFormat) {
@@ -509,21 +558,27 @@ struct PhotoListView: View {
     }
     
     private var emptyView: some View {
-        Text("No hay imágenes disponibles")
-            .foregroundColor(.gray)
+        EmptyStateView(
+            title: "No hay imágenes disponibles",
+            message: "Cuando el backend entregue material nuevo, aparecerá aquí para preparar publicaciones.",
+            systemImage: "photo.on.rectangle.angled"
+        )
+        .padding(16)
     }
 
     private func errorView(message: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .foregroundColor(.red)
-            
-            Button("Reintentar") {
+        EmptyStateView(
+            title: "No pudimos cargar las fotos",
+            message: message,
+            systemImage: "wifi.exclamationmark",
+            actionTitle: "Reintentar",
+            action: {
                 Task {
                     await viewModel.loadPhotos()
                 }
             }
-        }
+        )
+        .padding(16)
     }
 }
 
@@ -598,11 +653,11 @@ private struct FilterChip: View {
                     .font(.caption.weight(.semibold))
             }
             .foregroundColor(isSelected ? .white : .primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.accentColor : Color(.tertiarySystemBackground))
+                    .fill(isSelected ? AppColors.brand : AppColors.field)
             )
         }
         .buttonStyle(.plain)
@@ -617,9 +672,20 @@ private struct PhotoFormatSection: View {
     let onSelect: (Photo) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("\(photos.count) imágenes")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
 
             if format == .horizontal {
                 LazyVStack(spacing: 10) {
@@ -641,6 +707,7 @@ private struct PhotoFormatSection: View {
                 }
             }
         }
+        .padding(.top, 2)
     }
 }
 
@@ -650,35 +717,63 @@ struct PhotoCell: View {
     let aspectRatio: Double
     
     var body: some View {
-        AsyncImage(url: URL(string: photo.imageUrl)) { phase in
-            
-            switch phase {
-                
-            case .empty:
-                ZStack {
-                    Color.gray.opacity(0.2)
-                    ProgressView()
+        ZStack(alignment: .bottomLeading) {
+            AsyncImage(url: URL(string: photo.imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    ZStack {
+                        AppColors.field
+                        ProgressView()
+                    }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    ZStack {
+                        AppColors.field
+                        Image(systemName: "photo")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    }
+                @unknown default:
+                    EmptyView()
                 }
-                
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-                
-            case .failure:
-                ZStack {
-                    Color.gray.opacity(0.3)
-                    Image(systemName: "photo")
-                        .foregroundColor(.gray)
-                }
-                
-            @unknown default:
-                EmptyView()
             }
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let productName = photo.productName, !productName.isEmpty {
+                    Text(productName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 6) {
+                    if let origin = photo.origin, !origin.isEmpty {
+                        Text(origin.capitalized)
+                    }
+
+                    if let platform = photo.destinationPlatform {
+                        Text(platform.title)
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.86))
+                .lineLimit(1)
+            }
+            .padding(10)
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipped()
-        .cornerRadius(8)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
     }
 }

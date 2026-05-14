@@ -11,6 +11,7 @@ struct MainTabView: View {
 
     let mediaRepository: MediaRepository
     private let apiClient = APIClient()
+    @ObservedObject private var publishingActivity = PublishingActivityCenter.shared
     
     var body: some View {
         TabView {
@@ -49,6 +50,9 @@ struct MainTabView: View {
                 Label("Conexión", systemImage: "link")
             }
         }
-        .tint(.red) // opcional estilo iOS como tu imagen
+        .tint(AppColors.brand)
+        .overlay(alignment: .bottom) {
+            PublishingActivityOverlay(activity: publishingActivity)
+        }
     }
 }
