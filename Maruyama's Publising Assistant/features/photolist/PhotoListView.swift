@@ -14,6 +14,9 @@ struct PhotoListView: View {
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
     @State private var completionResult: FusionCompletionResult?
+    @State private var isShowingSearch = false
+    @State private var searchText = ""
+    @State private var submittedSearchText = ""
     @State private var isShowingFilters = false
     @State private var selectedFormats: Set<PhotoFormat> = []
     @State private var selectedOrigins: Set<String> = []
@@ -26,6 +29,7 @@ struct PhotoListView: View {
     @State private var usesEndDate = false
     @State private var startDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1)) ?? Date()
     @State private var endDate = Date()
+    @FocusState private var isSearchFocused: Bool
     
     private let apiClient: APIClient
     private let distributorRepository: DistributorRepositoryImpl
@@ -76,6 +80,21 @@ struct PhotoListView: View {
                     )
                 }
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingSearch.toggle()
+                            }
+                            if isShowingSearch {
+                                isSearchFocused = true
+                            }
+                        } label: {
+                            Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                                .foregroundStyle(AppColors.brand)
+                        }
+                        .accessibilityLabel("Buscar fotos")
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             showLogoutConfirm = true
@@ -137,6 +156,11 @@ struct PhotoListView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
                 gallerySummary
+
+                if isShowingSearch {
+                    searchPanel
+                }
+
                 filterHeader
 
                 if isShowingFilters {
@@ -178,6 +202,7 @@ struct PhotoListView: View {
             let matchesCoordinates: Bool
             let matchesContent: Bool
             let matchesPlatform = photo.isCompatible(with: platformFilter)
+            let matchesSearch = photo.matchesSearch(submittedSearchText)
             let matchesStartDate: Bool
             let matchesEndDate: Bool
 
@@ -221,6 +246,7 @@ struct PhotoListView: View {
                 && matchesCoordinates
                 && matchesContent
                 && matchesPlatform
+                && matchesSearch
                 && matchesStartDate
                 && matchesEndDate
         }
@@ -286,6 +312,99 @@ struct PhotoListView: View {
         }
     }
 
+    private var searchPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.brand)
+
+                TextField("Buscar producto, país, formato...", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isSearchFocused)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        submitSearch()
+                    }
+
+                if !searchText.isEmpty {
+                    Button {
+                        clearSearch()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Limpiar búsqueda")
+                }
+
+                Button {
+                    submitSearch()
+                } label: {
+                    Text("Buscar")
+                        .font(.subheadline.weight(.bold))
+                }
+                .disabled(normalized(searchText).isEmpty)
+            }
+            .padding(13)
+            .background(AppColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            if !searchSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionEyebrow("Sugerencias", systemImage: "magnifyingglass.circle")
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(searchSuggestions, id: \.self) { suggestion in
+                                Button {
+                                    searchText = suggestion
+                                    submittedSearchText = suggestion
+                                    isSearchFocused = false
+                                } label: {
+                                    Label(suggestion, systemImage: "magnifyingglass")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppColors.ink)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(AppColors.field)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !submittedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 8) {
+                    StatusBadge(
+                        text: "Resultados para \(submittedSearchText)",
+                        systemImage: "checkmark.circle.fill",
+                        tint: AppColors.brand
+                    )
+
+                    Button("Quitar") {
+                        clearSearch()
+                    }
+                    .font(.caption.weight(.bold))
+                }
+            }
+        }
+        .appCard(cornerRadius: 22, padding: 16)
+        .onChange(of: searchText) { _, newValue in
+            if normalized(newValue).isEmpty {
+                submittedSearchText = ""
+            } else if searchSuggestions.count == 1,
+                      normalized(searchSuggestions[0]).hasPrefix(normalized(newValue)),
+                      normalized(searchSuggestions[0]) != normalized(newValue) {
+                submittedSearchText = ""
+            }
+        }
+    }
+
     private var gallerySummary: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
@@ -315,6 +434,10 @@ struct PhotoListView: View {
 
                 if activeFilterCount > 0 {
                     StatusBadge(text: "\(filteredPhotos.count) visibles", systemImage: "eye.fill", tint: AppColors.brand)
+                }
+
+                if !submittedSearchText.isEmpty {
+                    StatusBadge(text: "Búsqueda activa", systemImage: "magnifyingglass", tint: AppColors.brand)
                 }
             }
         }
@@ -471,6 +594,7 @@ struct PhotoListView: View {
             + (contentFilter == .all ? 0 : 1)
             + (platformFilter == .all ? 0 : 1)
             + (sortOrder == .newest ? 0 : 1)
+            + (submittedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
             + adminFilterCount
     }
 
@@ -519,6 +643,53 @@ struct PhotoListView: View {
         sortOrder = .newest
         usesStartDate = false
         usesEndDate = false
+    }
+
+    private func submitSearch() {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if searchSuggestions.count == 1,
+           normalized(searchSuggestions[0]).hasPrefix(normalized(trimmed)) {
+            searchText = searchSuggestions[0]
+            submittedSearchText = searchSuggestions[0]
+        } else {
+            submittedSearchText = trimmed
+        }
+
+        isSearchFocused = false
+    }
+
+    private func clearSearch() {
+        searchText = ""
+        submittedSearchText = ""
+        isSearchFocused = false
+    }
+
+    private var searchSuggestions: [String] {
+        let query = normalized(searchText)
+        guard !query.isEmpty else { return [] }
+
+        let candidates = viewModel.photos
+            .flatMap { $0.searchSuggestionValues }
+            .filter { normalized($0).contains(query) }
+
+        return Array(NSOrderedSet(array: candidates).compactMap { $0 as? String })
+            .sorted { lhs, rhs in
+                let lhsStarts = normalized(lhs).hasPrefix(query)
+                let rhsStarts = normalized(rhs).hasPrefix(query)
+
+                if lhsStarts != rhsStarts {
+                    return lhsStarts
+                }
+
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.normalizedForPhotoSearch
     }
 
     private var availableOrigins: [String] {
@@ -943,5 +1114,48 @@ private extension Array {
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0..<Swift.min($0 + size, count)])
         }
+    }
+}
+
+private extension Photo {
+    var searchSuggestionValues: [String] {
+        [
+            productName,
+            origin,
+            state,
+            platform,
+            formatDisplay,
+            serverFormat,
+            createdAt,
+            destinationPlatform?.title,
+            format.title,
+            format.filterTitle,
+            "ID \(id)"
+        ]
+        .compactMap { value in
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return nil
+            }
+
+            return value
+        }
+    }
+
+    func matchesSearch(_ query: String) -> Bool {
+        let normalizedQuery = query.normalizedForPhotoSearch
+        guard !normalizedQuery.isEmpty else { return true }
+
+        return searchSuggestionValues.contains {
+            $0.normalizedForPhotoSearch.contains(normalizedQuery)
+        }
+    }
+}
+
+private extension String {
+    var normalizedForPhotoSearch: String {
+        folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 }
