@@ -689,20 +689,28 @@ private struct PhotoFormatSection: View {
 
             if format == .horizontal {
                 LazyVStack(spacing: 10) {
-                    ForEach(photos) { photo in
-                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
-                            .onTapGesture {
-                                onSelect(photo)
-                            }
+                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
+                        PhotoRenderBlock(
+                            blockIndex: index,
+                            format: format,
+                            photos: blockPhotos,
+                            compactColumns: compactColumns,
+                            onSelect: onSelect
+                        )
+                        .id(blockPhotos.map(\.id))
                     }
                 }
             } else {
-                LazyVGrid(columns: compactColumns, spacing: 10) {
-                    ForEach(photos) { photo in
-                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
-                            .onTapGesture {
-                                onSelect(photo)
-                            }
+                LazyVStack(spacing: 10) {
+                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
+                        PhotoRenderBlock(
+                            blockIndex: index,
+                            format: format,
+                            photos: blockPhotos,
+                            compactColumns: compactColumns,
+                            onSelect: onSelect
+                        )
+                        .id(blockPhotos.map(\.id))
                     }
                 }
             }
@@ -711,10 +719,145 @@ private struct PhotoFormatSection: View {
     }
 }
 
-struct PhotoCell: View {
+private struct PhotoRenderBlock: View {
+    let blockIndex: Int
+    let format: PhotoFormat
+    let photos: [Photo]
+    let compactColumns: [GridItem]
+    let onSelect: (Photo) -> Void
+
+    @State private var loadedPhotoIDs: Set<Int> = []
+
+    private var isReady: Bool {
+        loadedPhotoIDs.count >= photos.count
+    }
+
+    private var photoIDs: [Int] {
+        photos.map(\.id)
+    }
+
+    var body: some View {
+        ZStack {
+            blockContent
+                .opacity(isReady ? 1 : 0)
+                .allowsHitTesting(isReady)
+
+            if !isReady {
+                PhotoBlockLoadingView(
+                    loadedCount: loadedPhotoIDs.count,
+                    totalCount: photos.count
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: isReady)
+        .onChange(of: photoIDs) { _, _ in
+            loadedPhotoIDs = []
+        }
+    }
+
+    @ViewBuilder
+    private var blockContent: some View {
+        if format == .horizontal {
+            LazyVStack(spacing: 10) {
+                ForEach(photos) { photo in
+                    PhotoCell(
+                        photo: photo,
+                        aspectRatio: format.displayAspectRatio,
+                        onRenderComplete: markLoaded
+                    )
+                    .onTapGesture {
+                        onSelect(photo)
+                    }
+                }
+            }
+        } else {
+            LazyVGrid(columns: compactColumns, spacing: 10) {
+                ForEach(photos) { photo in
+                    PhotoCell(
+                        photo: photo,
+                        aspectRatio: format.displayAspectRatio,
+                        onRenderComplete: markLoaded
+                    )
+                    .onTapGesture {
+                        onSelect(photo)
+                    }
+                }
+            }
+        }
+    }
+
+    private func markLoaded(_ photo: Photo) {
+        loadedPhotoIDs.insert(photo.id)
+    }
+}
+
+private struct PhotoBlockLoadingView: View {
+    let loadedCount: Int
+    let totalCount: Int
+
+    var body: some View {
+        VStack(spacing: 14) {
+            BubbleLoadingIndicator()
+
+            VStack(spacing: 4) {
+                Text("Preparando siguiente bloque")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.ink)
+
+                Text("\(loadedCount) de \(totalCount) imágenes listas")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 160)
+        .padding(18)
+        .background(Color(.systemBackground))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(AppColors.brand.opacity(0.16), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 14, x: 0, y: 7)
+    }
+}
+
+private struct BubbleLoadingIndicator: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(AppColors.brand.opacity(0.82 - Double(index) * 0.14))
+                    .frame(width: 12, height: 12)
+                    .scaleEffect(isAnimating ? 1.12 : 0.72)
+                    .offset(y: isAnimating ? -4 : 4)
+                    .animation(
+                        .easeInOut(duration: 0.52)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.12),
+                        value: isAnimating
+                    )
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppColors.brand.opacity(0.10))
+        .clipShape(Capsule())
+        .onAppear {
+            isAnimating = true
+        }
+    }
+}
+
+private struct PhotoCell: View {
     
     let photo: Photo
     let aspectRatio: Double
+    let onRenderComplete: (Photo) -> Void
+    @State private var didCompleteRender = false
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -729,6 +872,9 @@ struct PhotoCell: View {
                     image
                         .resizable()
                         .scaledToFill()
+                        .onAppear {
+                            completeRenderIfNeeded()
+                        }
                 case .failure:
                     ZStack {
                         AppColors.field
@@ -736,9 +882,15 @@ struct PhotoCell: View {
                             .font(.title2)
                             .foregroundColor(.secondary)
                     }
+                    .onAppear {
+                        completeRenderIfNeeded()
+                    }
                 @unknown default:
                     EmptyView()
                 }
+            }
+            .onChange(of: photo.id) { _, _ in
+                didCompleteRender = false
             }
 
             LinearGradient(
@@ -775,5 +927,21 @@ struct PhotoCell: View {
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+
+    private func completeRenderIfNeeded() {
+        guard !didCompleteRender else { return }
+        didCompleteRender = true
+        onRenderComplete(photo)
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }

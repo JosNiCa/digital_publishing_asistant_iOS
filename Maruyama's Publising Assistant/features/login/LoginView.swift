@@ -1,5 +1,5 @@
 //
-//  ContentView.swift
+//  LoginView.swift
 //  Maruyama's Publising Assistant
 //
 //  Created by LJD Technology on 23/03/26.

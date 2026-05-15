@@ -51,7 +51,7 @@ struct MainTabView: View {
             }
         }
         .tint(AppColors.brand)
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .top) {
             PublishingActivityOverlay(activity: publishingActivity)
         }
     }

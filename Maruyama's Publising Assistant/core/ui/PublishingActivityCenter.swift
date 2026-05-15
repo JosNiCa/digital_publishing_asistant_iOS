@@ -81,8 +81,8 @@ struct PublishingActivityOverlay: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.18), radius: 22, x: 0, y: 10)
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
             .animation(.spring(response: 0.28, dampingFraction: 0.82), value: activity.state)
             .allowsHitTesting(false)
         }
