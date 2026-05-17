@@ -30,6 +30,19 @@ final class AuthRepositoryImpl: AuthRepository {
                 requiresAuth: false
             )
         } catch let error as APIError {
+            if case .serverError(let code, let message) = error {
+                switch code {
+                case "invalid_credentials":
+                    throw AuthError.invalidCredentials
+                case "not_approved":
+                    throw AuthError.notApproved
+                case "must_change_password":
+                    throw AuthError.mustChangePassword
+                default:
+                    throw AuthError.server(message)
+                }
+            }
+
             throw AuthError.server(error.localizedDescription)
         }
         

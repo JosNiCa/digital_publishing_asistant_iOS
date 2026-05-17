@@ -13,4 +13,8 @@ protocol PublishingRepository {
     ) async throws
     
     func verifyConnection() async throws -> ConnectionStatus
+
+    func fetchScheduledPosts() async throws -> [ScheduledPost]
+
+    func fetchHealthStatus() async throws -> PublishingHealthStatus
 }

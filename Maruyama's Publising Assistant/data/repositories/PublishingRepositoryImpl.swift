@@ -61,8 +61,33 @@ final class PublishingRepositoryImpl: PublishingRepository {
             instagramConnected: instagramConnected,
             facebookPageId: response.facebookPageId,
             instagramUserId: response.instagramUserId,
-            userId: response.userId,
+            distributorId: response.distribuidorId,
             message: response.message
         )
+    }
+
+    func fetchScheduledPosts() async throws -> [ScheduledPost] {
+        let response: ScheduledPostsResponseDTO = try await apiClient.request(
+            endpoint: .scheduledPosts,
+            requiresAuth: true
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                code: response.error,
+                message: response.message ?? "No se pudieron cargar publicaciones programadas."
+            )
+        }
+
+        return (response.posts ?? []).map { $0.toDomain() }
+    }
+
+    func fetchHealthStatus() async throws -> PublishingHealthStatus {
+        let response: PublishingHealthResponseDTO = try await apiClient.request(
+            endpoint: .publishingHealth,
+            requiresAuth: false
+        )
+
+        return response.toDomain()
     }
 }

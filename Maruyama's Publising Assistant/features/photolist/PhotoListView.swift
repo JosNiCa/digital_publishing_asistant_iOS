@@ -23,7 +23,7 @@ struct PhotoListView: View {
     @State private var selectedStates: Set<String> = []
     @State private var coordinateFilter: PhotoCoordinateFilter = .all
     @State private var contentFilter: PhotoContentFilter = .all
-    @State private var platformFilter: PublishingPlatform = .all
+    @State private var platformFilter: PublishingPlatformFilter = .all
     @State private var sortOrder: PhotoSortOrder = .newest
     @State private var usesStartDate = false
     @State private var usesEndDate = false
@@ -459,7 +459,7 @@ struct PhotoListView: View {
                     .foregroundColor(.secondary)
 
                 Picker("Plataforma", selection: $platformFilter) {
-                    ForEach(PublishingPlatform.allCases) { platform in
+                    ForEach(PublishingPlatformFilter.allCases) { platform in
                         Text(platform.title).tag(platform)
                     }
                 }
@@ -1083,8 +1083,8 @@ private struct PhotoCell: View {
                         Text(origin.capitalized)
                     }
 
-                    if let platform = photo.destinationPlatform {
-                        Text(platform.title)
+                    if let platformName = photo.platform?.name, !platformName.isEmpty {
+                        Text(platformName)
                     }
                 }
                 .font(.caption2.weight(.semibold))
@@ -1092,12 +1092,48 @@ private struct PhotoCell: View {
                 .lineLimit(1)
             }
             .padding(10)
+            .padding(.trailing, photo.platform?.iconUrl == nil ? 0 : 42)
+
+            platformIcon
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+
+    @ViewBuilder
+    private var platformIcon: some View {
+        if let platform = photo.platform,
+           let iconUrl = platform.iconUrl {
+            AsyncImage(url: iconUrl) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 24, height: 24)
+                        .padding(5)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .padding(5)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                case .failure:
+                    EmptyView()
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .padding(6)
+            .accessibilityLabel(platform.name.isEmpty ? "Plataforma" : platform.name)
+        }
     }
 
     private func completeRenderIfNeeded() {
@@ -1123,7 +1159,8 @@ private extension Photo {
             productName,
             origin,
             state,
-            platform,
+            platform?.key,
+            platform?.name,
             formatDisplay,
             serverFormat,
             createdAt,
