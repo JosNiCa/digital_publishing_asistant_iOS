@@ -14,18 +14,23 @@ struct PhotoListView: View {
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
     @State private var completionResult: FusionCompletionResult?
+    @State private var isShowingSearch = false
+    @State private var searchText = ""
+    @State private var submittedSearchText = ""
     @State private var isShowingFilters = false
     @State private var selectedFormats: Set<PhotoFormat> = []
-    @State private var selectedOrigins: Set<String> = []
     @State private var selectedStates: Set<String> = []
+    @State private var countryFilterText = ""
+    @State private var productFilterText = ""
     @State private var coordinateFilter: PhotoCoordinateFilter = .all
     @State private var contentFilter: PhotoContentFilter = .all
-    @State private var platformFilter: PublishingPlatform = .all
+    @State private var platformFilter: PublishingPlatformFilter = .all
     @State private var sortOrder: PhotoSortOrder = .newest
     @State private var usesStartDate = false
     @State private var usesEndDate = false
     @State private var startDate = Calendar.current.date(from: DateComponents(year: 2025, month: 1, day: 1)) ?? Date()
     @State private var endDate = Date()
+    @FocusState private var isSearchFocused: Bool
     
     private let apiClient: APIClient
     private let distributorRepository: DistributorRepositoryImpl
@@ -45,6 +50,8 @@ struct PhotoListView: View {
         NavigationStack {
             content
                 .navigationTitle("Fotos")
+                .navigationBarTitleDisplayMode(.large)
+                .appScreenBackground()
                 .task {
                     await viewModel.loadPhotos()
                 }
@@ -61,15 +68,40 @@ struct PhotoListView: View {
                             FusionSession.shared.clear()
                             completionResult = result
                             selectedPhoto = nil
+                        },
+                        onBackgroundPublishStarted: {
+                            selectedPhoto = nil
+                        },
+                        onBackgroundPublishFinished: { _ in
+                            FusionSession.shared.clear()
+                            Task {
+                                await viewModel.refresh()
+                            }
                         }
                     )
                 }
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingSearch.toggle()
+                            }
+                            if isShowingSearch {
+                                isSearchFocused = true
+                            }
+                        } label: {
+                            Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                                .foregroundStyle(AppColors.brand)
+                        }
+                        .accessibilityLabel("Buscar fotos")
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             showLogoutConfirm = true
                         } label: {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundStyle(AppColors.brand)
                         }
                         .accessibilityLabel("Cerrar sesión")
                     }
@@ -102,7 +134,7 @@ struct PhotoListView: View {
     private var content: some View {
         
         if viewModel.isLoading && viewModel.photos.isEmpty {
-            ProgressView()
+            ProgressView("Cargando fotos...")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             
         } else if let error = viewModel.errorMessage {
@@ -124,6 +156,12 @@ struct PhotoListView: View {
     private var gridView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
+                gallerySummary
+
+                if isShowingSearch {
+                    searchPanel
+                }
+
                 filterHeader
 
                 if isShowingFilters {
@@ -149,20 +187,23 @@ struct PhotoListView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 6)
+            .padding(.bottom, 28)
         }
+        .background(AppColors.canvas)
     }
 
     private var filteredPhotos: [Photo] {
         let photos = viewModel.photos.filter { photo in
             let matchesFormat = selectedFormats.isEmpty || selectedFormats.contains(photo.format)
-            let matchesOrigin = selectedOrigins.isEmpty
-                || selectedOrigins.contains(photo.origin ?? "")
             let matchesState = selectedStates.isEmpty
                 || selectedStates.contains(photo.state ?? "")
+            let matchesCountry = matchesOriginFilter(countryFilterText, in: photo.origin)
+            let matchesProduct = matchesFilterText(productFilterText, in: photo.productName)
             let matchesCoordinates: Bool
             let matchesContent: Bool
             let matchesPlatform = photo.isCompatible(with: platformFilter)
+            let matchesSearch = photo.matchesSearch(submittedSearchText)
             let matchesStartDate: Bool
             let matchesEndDate: Bool
 
@@ -201,11 +242,13 @@ struct PhotoListView: View {
             }
 
             return matchesFormat
-                && matchesOrigin
                 && matchesState
+                && matchesCountry
+                && matchesProduct
                 && matchesCoordinates
                 && matchesContent
                 && matchesPlatform
+                && matchesSearch
                 && matchesStartDate
                 && matchesEndDate
         }
@@ -236,31 +279,171 @@ struct PhotoListView: View {
     }
 
     private var filterHeader: some View {
-        HStack {
+        HStack(spacing: 12) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isShowingFilters.toggle()
                 }
             } label: {
-                Label("Filtros", systemImage: "line.3.horizontal.decrease.circle")
-                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 8) {
+                    Image(systemName: isShowingFilters ? "slider.horizontal.3" : "line.3.horizontal.decrease.circle")
+                    Text("Filtros")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppColors.ink)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(AppColors.elevated)
+                .clipShape(Capsule())
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.plain)
 
             if activeFilterCount > 0 {
-                Text("\(activeFilterCount)")
-                    .font(.caption.weight(.bold))
-                    .foregroundColor(.white)
-                    .frame(width: 22, height: 22)
-                    .background(Circle().fill(Color.accentColor))
+                StatusBadge(
+                    text: "\(activeFilterCount) activos",
+                    systemImage: "checkmark.circle.fill",
+                    tint: AppColors.brand
+                )
             }
 
             Spacer()
 
             Text("\(filteredPhotos.count) fotos")
-                .font(.caption)
+                .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
         }
+    }
+
+    private var searchPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.brand)
+
+                TextField("Buscar producto, país, formato...", text: $searchText)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isSearchFocused)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        submitSearch()
+                    }
+
+                if !searchText.isEmpty {
+                    Button {
+                        clearSearch()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Limpiar búsqueda")
+                }
+
+                Button {
+                    submitSearch()
+                } label: {
+                    Text("Buscar")
+                        .font(.subheadline.weight(.bold))
+                }
+                .disabled(normalized(searchText).isEmpty)
+            }
+            .padding(13)
+            .background(AppColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            if !searchSuggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionEyebrow("Sugerencias", systemImage: "magnifyingglass.circle")
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(searchSuggestions, id: \.self) { suggestion in
+                                Button {
+                                    searchText = suggestion
+                                    submittedSearchText = suggestion
+                                    isSearchFocused = false
+                                } label: {
+                                    Label(suggestion, systemImage: "magnifyingglass")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppColors.ink)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(AppColors.field)
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !submittedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                HStack(spacing: 8) {
+                    StatusBadge(
+                        text: "Resultados para \(submittedSearchText)",
+                        systemImage: "checkmark.circle.fill",
+                        tint: AppColors.brand
+                    )
+
+                    Button("Quitar") {
+                        clearSearch()
+                    }
+                    .font(.caption.weight(.bold))
+                }
+            }
+        }
+        .appCard(cornerRadius: 22, padding: 16)
+        .onChange(of: searchText) { _, newValue in
+            if normalized(newValue).isEmpty {
+                submittedSearchText = ""
+            } else if searchSuggestions.count == 1,
+                      normalized(searchSuggestions[0]).hasPrefix(normalized(newValue)),
+                      normalized(searchSuggestions[0]) != normalized(newValue) {
+                submittedSearchText = ""
+            }
+        }
+    }
+
+    private var gallerySummary: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Biblioteca lista")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Selecciona una imagen y prueba logos con posiciones disponibles antes de publicar.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                Image(systemName: "photo.stack.fill")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 48, height: 48)
+                    .background(AppColors.brand.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+
+            HStack(spacing: 8) {
+                StatusBadge(text: "\(viewModel.photos.count) totales", systemImage: "photo.on.rectangle", tint: AppColors.softInk)
+
+                if activeFilterCount > 0 {
+                    StatusBadge(text: "\(filteredPhotos.count) visibles", systemImage: "eye.fill", tint: AppColors.brand)
+                }
+
+                if !submittedSearchText.isEmpty {
+                    StatusBadge(text: "Búsqueda activa", systemImage: "magnifyingglass", tint: AppColors.brand)
+                }
+            }
+        }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var filterPanel: some View {
@@ -278,7 +461,7 @@ struct PhotoListView: View {
                     .foregroundColor(.secondary)
 
                 Picker("Plataforma", selection: $platformFilter) {
-                    ForEach(PublishingPlatform.allCases) { platform in
+                    ForEach(PublishingPlatformFilter.allCases) { platform in
                         Text(platform.title).tag(platform)
                     }
                 }
@@ -292,6 +475,32 @@ struct PhotoListView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("País")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                AutocompleteFilterField(
+                    placeholder: "Escribe un país",
+                    systemImage: "globe.americas.fill",
+                    text: $countryFilterText,
+                    suggestions: countryFilterSuggestions
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Producto")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                AutocompleteFilterField(
+                    placeholder: "Escribe un producto",
+                    systemImage: "shippingbox.fill",
+                    text: $productFilterText,
+                    suggestions: productFilterSuggestions
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Contenido")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.secondary)
@@ -302,16 +511,6 @@ struct PhotoListView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-            }
-
-            if !availableOrigins.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Origen")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-
-                    horizontalChips(availableOrigins, selected: selectedOrigins, toggle: toggleOrigin)
-                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -397,9 +596,7 @@ struct PhotoListView: View {
                 .font(.caption.weight(.semibold))
             }
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var activeFilterCount: Int {
@@ -411,29 +608,24 @@ struct PhotoListView: View {
             : 0
 
         return selectedFormats.count
-            + selectedOrigins.count
+            + (countryFilterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
+            + (productFilterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
             + (contentFilter == .all ? 0 : 1)
             + (platformFilter == .all ? 0 : 1)
             + (sortOrder == .newest ? 0 : 1)
+            + (submittedSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
             + adminFilterCount
     }
 
     private var emptyFilteredView: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
-                .font(.title2)
-                .foregroundColor(.secondary)
-
-            Text("No hay fotos con esos filtros")
-                .font(.subheadline.weight(.semibold))
-
-            Button("Limpiar filtros") {
-                clearFilters()
-            }
-            .font(.caption.weight(.semibold))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
+        EmptyStateView(
+            title: "No hay fotos con esos filtros",
+            message: "Prueba con otra plataforma, fecha o formato para ampliar la búsqueda.",
+            systemImage: "line.3.horizontal.decrease.circle",
+            actionTitle: "Limpiar filtros",
+            action: clearFilters
+        )
+        .appCard(cornerRadius: 22, padding: 0)
     }
 
     private func toggleFormat(_ format: PhotoFormat) {
@@ -441,14 +633,6 @@ struct PhotoListView: View {
             selectedFormats.remove(format)
         } else {
             selectedFormats.insert(format)
-        }
-    }
-
-    private func toggleOrigin(_ origin: String) {
-        if selectedOrigins.contains(origin) {
-            selectedOrigins.remove(origin)
-        } else {
-            selectedOrigins.insert(origin)
         }
     }
 
@@ -462,8 +646,9 @@ struct PhotoListView: View {
 
     private func clearFilters() {
         selectedFormats = []
-        selectedOrigins = []
         selectedStates = []
+        countryFilterText = ""
+        productFilterText = ""
         coordinateFilter = .all
         contentFilter = .all
         platformFilter = .all
@@ -472,12 +657,132 @@ struct PhotoListView: View {
         usesEndDate = false
     }
 
-    private var availableOrigins: [String] {
-        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.origin) })).sorted()
+    private func submitSearch() {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if searchSuggestions.count == 1,
+           normalized(searchSuggestions[0]).hasPrefix(normalized(trimmed)) {
+            searchText = searchSuggestions[0]
+            submittedSearchText = searchSuggestions[0]
+        } else {
+            submittedSearchText = trimmed
+        }
+
+        isSearchFocused = false
+    }
+
+    private func clearSearch() {
+        searchText = ""
+        submittedSearchText = ""
+        isSearchFocused = false
+    }
+
+    private var searchSuggestions: [String] {
+        let query = normalized(searchText)
+        guard !query.isEmpty else { return [] }
+
+        let candidates = viewModel.photos
+            .flatMap { $0.searchSuggestionValues }
+            .filter { normalized($0).contains(query) }
+
+        return Array(NSOrderedSet(array: candidates).compactMap { $0 as? String })
+            .sorted { lhs, rhs in
+                let lhsStarts = normalized(lhs).hasPrefix(query)
+                let rhsStarts = normalized(rhs).hasPrefix(query)
+
+                if lhsStarts != rhsStarts {
+                    return lhsStarts
+                }
+
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+            .prefix(8)
+            .map { $0 }
+    }
+
+    private func normalized(_ value: String) -> String {
+        value.normalizedForPhotoSearch
     }
 
     private var availableStates: [String] {
         Array(Set(viewModel.photos.compactMap { valueIfPresent($0.state) })).sorted()
+    }
+
+    private var availableCountries: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.origin) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var availableProducts: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.productName) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var countryFilterSuggestions: [String] {
+        autocompleteSuggestions(matching: countryFilterText, in: availableCountries)
+    }
+
+    private var productFilterSuggestions: [String] {
+        autocompleteSuggestions(matching: productFilterText, in: availableProducts)
+    }
+
+    private func matchesFilterText(_ filterText: String, in value: String?) -> Bool {
+        let query = normalized(filterText)
+        guard !query.isEmpty else { return true }
+
+        return normalized(value ?? "").contains(query)
+    }
+
+    private func matchesOriginFilter(_ filterText: String, in origin: String?) -> Bool {
+        let query = normalized(filterText)
+        guard !query.isEmpty else { return true }
+
+        return originSearchValues(for: origin).contains {
+            $0.contains(query) || query.contains($0)
+        }
+    }
+
+    private func autocompleteSuggestions(matching queryText: String, in values: [String]) -> [String] {
+        let query = normalized(queryText)
+        guard !query.isEmpty else { return [] }
+
+        return values
+            .filter { normalized($0).contains(query) }
+            .sorted { lhs, rhs in
+                let lhsStarts = normalized(lhs).hasPrefix(query)
+                let rhsStarts = normalized(rhs).hasPrefix(query)
+
+                if lhsStarts != rhsStarts {
+                    return lhsStarts
+                }
+
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    private func originSearchValues(for origin: String?) -> [String] {
+        guard let origin = valueIfPresent(origin) else { return [] }
+
+        var values = Set([normalized(origin)])
+
+        if let aliases = countryAliases[normalized(origin)] {
+            values.formUnion(aliases.map(normalized))
+        }
+
+        return Array(values)
+    }
+
+    private var countryAliases: [String: [String]] {
+        [
+            "mexico": ["mx"],
+            "mx": ["mexico"],
+            "colombia": ["co"],
+            "co": ["colombia"],
+            "ecuador": ["ec"],
+            "ec": ["ecuador"]
+        ]
     }
 
     private func valueIfPresent(_ value: String?) -> String? {
@@ -509,21 +814,27 @@ struct PhotoListView: View {
     }
     
     private var emptyView: some View {
-        Text("No hay imágenes disponibles")
-            .foregroundColor(.gray)
+        EmptyStateView(
+            title: "No hay imágenes disponibles",
+            message: "Cuando el backend entregue material nuevo, aparecerá aquí para preparar publicaciones.",
+            systemImage: "photo.on.rectangle.angled"
+        )
+        .padding(16)
     }
 
     private func errorView(message: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .foregroundColor(.red)
-            
-            Button("Reintentar") {
+        EmptyStateView(
+            title: "No pudimos cargar las fotos",
+            message: message,
+            systemImage: "wifi.exclamationmark",
+            actionTitle: "Reintentar",
+            action: {
                 Task {
                     await viewModel.loadPhotos()
                 }
             }
-        }
+        )
+        .padding(16)
     }
 }
 
@@ -598,14 +909,92 @@ private struct FilterChip: View {
                     .font(.caption.weight(.semibold))
             }
             .foregroundColor(isSelected ? .white : .primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.accentColor : Color(.tertiarySystemBackground))
+                    .fill(isSelected ? AppColors.brand : AppColors.field)
             )
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AutocompleteFilterField: View {
+    let placeholder: String
+    let systemImage: String
+    @Binding var text: String
+    let suggestions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 18)
+
+                TextField(placeholder, text: $text)
+                    .font(.subheadline)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Limpiar")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(AppColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, suggestion in
+                        Button {
+                            text = suggestion
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "text.magnifyingglass")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.brand)
+                                    .frame(width: 18)
+
+                                Text(suggestion)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppColors.ink)
+                                    .lineLimit(1)
+
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < suggestions.count - 1 {
+                            Divider()
+                                .padding(.leading, 40)
+                        }
+                    }
+                }
+                .background(Color(.systemBackground))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(AppColors.brand.opacity(0.10), lineWidth: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
     }
 }
 
@@ -617,68 +1006,425 @@ private struct PhotoFormatSection: View {
     let onSelect: (Photo) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("\(photos.count) imágenes")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
 
             if format == .horizontal {
                 LazyVStack(spacing: 10) {
-                    ForEach(photos) { photo in
-                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
-                            .onTapGesture {
-                                onSelect(photo)
-                            }
+                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
+                        PhotoRenderBlock(
+                            blockIndex: index,
+                            format: format,
+                            photos: blockPhotos,
+                            compactColumns: compactColumns,
+                            onSelect: onSelect
+                        )
+                        .id(blockPhotos.map(\.id))
                     }
                 }
             } else {
-                LazyVGrid(columns: compactColumns, spacing: 10) {
-                    ForEach(photos) { photo in
-                        PhotoCell(photo: photo, aspectRatio: format.displayAspectRatio)
+                LazyVStack(spacing: 10) {
+                    ForEach(Array(photos.chunked(into: 4).enumerated()), id: \.offset) { index, blockPhotos in
+                        PhotoRenderBlock(
+                            blockIndex: index,
+                            format: format,
+                            photos: blockPhotos,
+                            compactColumns: compactColumns,
+                            onSelect: onSelect
+                        )
+                        .id(blockPhotos.map(\.id))
+                    }
+                }
+            }
+        }
+        .padding(.top, 2)
+    }
+}
+
+private struct PhotoRenderBlock: View {
+    let blockIndex: Int
+    let format: PhotoFormat
+    let photos: [Photo]
+    let compactColumns: [GridItem]
+    let onSelect: (Photo) -> Void
+
+    @State private var loadedPhotoIDs: Set<Int> = []
+
+    private var isReady: Bool {
+        loadedPhotoIDs.count >= photos.count
+    }
+
+    private var photoIDs: [Int] {
+        photos.map(\.id)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            blockContent
+                .opacity(isReady ? 1 : 0)
+                .allowsHitTesting(isReady)
+
+            if !isReady {
+                PhotoBlockLoadingView(
+                    loadedCount: loadedPhotoIDs.count,
+                    totalCount: photos.count
+                )
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: isReady)
+        .onChange(of: photoIDs) { _, _ in
+            loadedPhotoIDs = []
+        }
+    }
+
+    @ViewBuilder
+    private var blockContent: some View {
+        if format == .horizontal {
+            LazyVStack(spacing: 10) {
+                ForEach(photos) { photo in
+                    PhotoCell(
+                        photo: photo,
+                        aspectRatio: format.displayAspectRatio,
+                        onRenderComplete: markLoaded
+                    )
+                    .onTapGesture {
+                        onSelect(photo)
+                    }
+                }
+            }
+        } else {
+            LazyVStack(spacing: 10) {
+                ForEach(Array(photos.chunked(into: 2).enumerated()), id: \.offset) { _, rowPhotos in
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(rowPhotos) { photo in
+                            PhotoCell(
+                                photo: photo,
+                                aspectRatio: format.displayAspectRatio,
+                                onRenderComplete: markLoaded
+                            )
                             .onTapGesture {
                                 onSelect(photo)
                             }
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        if rowPhotos.count == 1 {
+                            Spacer(minLength: 0)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
         }
     }
+
+    private func markLoaded(_ photo: Photo) {
+        loadedPhotoIDs.insert(photo.id)
+    }
 }
 
-struct PhotoCell: View {
+private struct PhotoBlockLoadingView: View {
+    let loadedCount: Int
+    let totalCount: Int
+
+    var body: some View {
+        VStack(spacing: 14) {
+            BubbleLoadingIndicator()
+
+            VStack(spacing: 4) {
+                Text("Preparando siguiente bloque")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppColors.ink)
+
+                Text("\(loadedCount) de \(totalCount) imágenes listas")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: 160)
+        .padding(18)
+        .background(Color(.systemBackground))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(AppColors.brand.opacity(0.16), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 14, x: 0, y: 7)
+    }
+}
+
+private struct BubbleLoadingIndicator: View {
+    @State private var isAnimating = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(0..<3, id: \.self) { index in
+                Circle()
+                    .fill(AppColors.brand.opacity(0.82 - Double(index) * 0.14))
+                    .frame(width: 12, height: 12)
+                    .scaleEffect(isAnimating ? 1.12 : 0.72)
+                    .offset(y: isAnimating ? -4 : 4)
+                    .animation(
+                        .easeInOut(duration: 0.52)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(index) * 0.12),
+                        value: isAnimating
+                    )
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppColors.brand.opacity(0.10))
+        .clipShape(Capsule())
+        .onAppear {
+            isAnimating = true
+        }
+    }
+}
+
+private struct PhotoCell: View {
     
     let photo: Photo
     let aspectRatio: Double
+    let onRenderComplete: (Photo) -> Void
+    @State private var didCompleteRender = false
+    @State private var imageRetryID = 0
+
+    private let maxImageRetries = 3
     
     var body: some View {
-        AsyncImage(url: URL(string: photo.imageUrl)) { phase in
-            
-            switch phase {
-                
-            case .empty:
-                ZStack {
-                    Color.gray.opacity(0.2)
-                    ProgressView()
+        ZStack(alignment: .bottomLeading) {
+            AsyncImage(url: resolvedImageURL) { phase in
+                switch phase {
+                case .empty:
+                    ZStack {
+                        AppColors.field
+                        ProgressView()
+                    }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .onAppear {
+                            completeRenderIfNeeded()
+                        }
+                case .failure:
+                    ZStack {
+                        AppColors.field
+                        if imageRetryID < maxImageRetries {
+                            ProgressView()
+                        } else {
+                            Button {
+                                didCompleteRender = false
+                                imageRetryID = 0
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 44, height: 44)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Reintentar imagen")
+                        }
+                    }
+                    .onAppear {
+                        retryImageOrComplete()
+                    }
+                @unknown default:
+                    EmptyView()
                 }
-                
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-                
-            case .failure:
-                ZStack {
-                    Color.gray.opacity(0.3)
-                    Image(systemName: "photo")
-                        .foregroundColor(.gray)
-                }
-                
-            @unknown default:
-                EmptyView()
             }
+            .id("\(photo.id)-\(imageRetryID)-\(resolvedImageURL?.absoluteString ?? photo.imageUrl)")
+            .onChange(of: photo.id) { _, _ in
+                didCompleteRender = false
+                imageRetryID = 0
+            }
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.55)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let productName = photo.productName, !productName.isEmpty {
+                    Text(productName)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 6) {
+                    if let origin = photo.origin, !origin.isEmpty {
+                        Text(origin.capitalized)
+                    }
+
+                    if let platformName = photo.platform?.name, !platformName.isEmpty {
+                        Text(platformName)
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.86))
+                .lineLimit(1)
+            }
+            .padding(10)
+            .padding(.trailing, photo.platform?.iconUrl == nil ? 0 : 42)
+
+            platformIcon
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipped()
-        .cornerRadius(8)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 12, x: 0, y: 6)
+    }
+
+    @ViewBuilder
+    private var platformIcon: some View {
+        if let platform = photo.platform,
+           let iconUrl = platform.iconUrl {
+            AsyncImage(url: iconUrl) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 24, height: 24)
+                        .padding(5)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .padding(5)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                case .failure:
+                    EmptyView()
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .padding(6)
+            .accessibilityLabel(platform.name.isEmpty ? "Plataforma" : platform.name)
+        }
+    }
+
+    private func completeRenderIfNeeded() {
+        guard !didCompleteRender else { return }
+        didCompleteRender = true
+        onRenderComplete(photo)
+    }
+
+    private func retryImageOrComplete() {
+        guard imageRetryID < maxImageRetries else {
+            completeRenderIfNeeded()
+            return
+        }
+
+        let nextRetryID = imageRetryID + 1
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(nextRetryID) * 450_000_000)
+            await MainActor.run {
+                guard imageRetryID < nextRetryID else { return }
+                imageRetryID = nextRetryID
+            }
+        }
+    }
+
+    private var resolvedImageURL: URL? {
+        photo.imageUrl.resolvedMediaURL
+    }
+}
+
+private extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
+}
+
+private extension Photo {
+    var searchSuggestionValues: [String] {
+        [
+            productName,
+            origin,
+            state,
+            platform?.key,
+            platform?.name,
+            formatDisplay,
+            serverFormat,
+            createdAt,
+            destinationPlatform?.title,
+            format.title,
+            format.filterTitle,
+            "ID \(id)"
+        ]
+        .compactMap { value in
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return nil
+            }
+
+            return value
+        }
+    }
+
+    func matchesSearch(_ query: String) -> Bool {
+        let normalizedQuery = query.normalizedForPhotoSearch
+        guard !normalizedQuery.isEmpty else { return true }
+
+        return searchSuggestionValues.contains {
+            $0.normalizedForPhotoSearch.contains(normalizedQuery)
+        }
+    }
+}
+
+private extension String {
+    var normalizedForPhotoSearch: String {
+        folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    var resolvedMediaURL: URL? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), url.scheme != nil {
+            return url
+        }
+
+        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? trimmed
+        if let url = URL(string: encoded), url.scheme != nil {
+            return url
+        }
+
+        if trimmed.hasPrefix("/") {
+            return URL(string: trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
+        }
+
+        return URL(string: "/" + trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
     }
 }

@@ -33,6 +33,8 @@ struct ConnectionsView: View {
             .padding(16)
         }
         .navigationTitle("Conexión")
+        .navigationBarTitleDisplayMode(.large)
+        .appScreenBackground()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -41,6 +43,7 @@ struct ConnectionsView: View {
                     }
                 } label: {
                     Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(AppColors.brand)
                 }
                 .disabled(viewModel.isLoading)
                 .accessibilityLabel("Actualizar estado")
@@ -55,14 +58,32 @@ struct ConnectionsView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Estado de Meta")
-                .font(.title2.weight(.bold))
+        VStack(alignment: .leading, spacing: 12) {
+            SectionEyebrow("Integraciones", systemImage: "link")
 
-            Text("Consulta si la integración está lista para publicar desde la app.")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Estado de Meta")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Consulta si Facebook e Instagram están listos para recibir publicaciones desde la app.")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 50, height: 50)
+                    .background(AppColors.brand.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
         }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var loadingView: some View {
@@ -72,9 +93,7 @@ struct ConnectionsView: View {
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     @ViewBuilder
@@ -97,6 +116,7 @@ struct ConnectionsView: View {
                     subtitle: status.facebookPageId.map { "Página conectada: \($0)" }
                         ?? "Sin página conectada",
                     systemImage: "f.circle.fill",
+                    iconURL: SocialPlatformAsset.facebookIconURL,
                     isConnected: status.facebookConnected
                 )
 
@@ -105,9 +125,11 @@ struct ConnectionsView: View {
                     subtitle: status.instagramUserId.map { "Cuenta conectada: \($0)" }
                         ?? "Sin cuenta Business conectada",
                     systemImage: "camera.fill",
+                    iconURL: SocialPlatformAsset.instagramIconURL,
                     isConnected: status.instagramConnected
                 )
             }
+            .appCard(cornerRadius: 22, padding: 12)
 
             if let message = status.message, !message.isEmpty {
                 infoMessage(message)
@@ -118,15 +140,19 @@ struct ConnectionsView: View {
     }
 
     private func overallCard(_ status: ConnectionStatus) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
                 Image(systemName: status.isConnected ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                    .font(.title2)
-                    .foregroundColor(status.isConnected ? .green : .orange)
+                    .font(.title2.weight(.semibold))
+                    .foregroundColor(status.isConnected ? AppColors.positive : AppColors.warning)
+                    .frame(width: 48, height: 48)
+                    .background((status.isConnected ? AppColors.positive : AppColors.warning).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(status.isConnected ? "Listo para publicar" : "Requiere atención en web")
-                        .font(.headline)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
 
                     Text(status.isConnected
                          ? "Meta está conectado para publicar contenido."
@@ -134,22 +160,26 @@ struct ConnectionsView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
+
+                Spacer()
             }
+
+            StatusBadge(
+                text: status.isConnected ? "Conectado" : "Pendiente",
+                systemImage: status.isConnected ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                tint: status.isConnected ? AppColors.positive : AppColors.warning
+            )
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private func infoMessage(_ message: String) -> some View {
         Text(message)
             .font(.caption)
             .foregroundColor(.secondary)
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.tertiarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .appCard(cornerRadius: 18, padding: 14)
     }
 
     private func errorView(_ message: String) -> some View {
@@ -166,8 +196,9 @@ struct ConnectionsView: View {
                     await viewModel.loadStatus()
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(PrimaryCapsuleButtonStyle())
         }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 }
 
@@ -175,17 +206,17 @@ private struct ConnectionStatusRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
+    var iconURL: URL? = nil
     let isConnected: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(isConnected ? Color.green.opacity(0.14) : Color.orange.opacity(0.14))
+                    .fill(isConnected ? AppColors.positive.opacity(0.14) : AppColors.warning.opacity(0.14))
                     .frame(width: 42, height: 42)
 
-                Image(systemName: systemImage)
-                    .foregroundColor(isConnected ? .green : .orange)
+                platformIcon
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -195,7 +226,7 @@ private struct ConnectionStatusRow: View {
 
                     Image(systemName: isConnected ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .font(.caption)
-                        .foregroundColor(isConnected ? .green : .orange)
+                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
                 }
 
                 Text(subtitle)
@@ -207,7 +238,39 @@ private struct ConnectionStatusRow: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(AppColors.field)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+
+    @ViewBuilder
+    private var platformIcon: some View {
+        if let iconURL {
+            AsyncImage(url: iconURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .controlSize(.mini)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    Image(systemName: systemImage)
+                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+                @unknown default:
+                    Image(systemName: systemImage)
+                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+                }
+            }
+            .frame(width: 22, height: 22)
+        } else {
+            Image(systemName: systemImage)
+                .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+        }
+    }
+}
+
+private enum SocialPlatformAsset {
+    static let facebookIconURL = URL(string: "https://ljdit.com/static/platforms/facebook.png")
+    static let instagramIconURL = URL(string: "https://ljdit.com/static/platforms/instagram.png")
 }

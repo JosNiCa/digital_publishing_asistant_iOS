@@ -13,7 +13,7 @@ struct Photo: Identifiable, Hashable {
     let width: Int?
     let height: Int?
     let serverFormat: String?
-    let platform: String?
+    let platform: PublishingPlatform?
     let origin: String?
     let createdAt: String?
     let isInUse: Bool?
@@ -28,7 +28,7 @@ struct Photo: Identifiable, Hashable {
         width: Int? = nil,
         height: Int? = nil,
         serverFormat: String? = nil,
-        platform: String? = nil,
+        platform: PublishingPlatform? = nil,
         origin: String? = nil,
         createdAt: String? = nil,
         isInUse: Bool? = nil,
@@ -50,6 +50,20 @@ struct Photo: Identifiable, Hashable {
         self.formatDisplay = formatDisplay
         self.productName = productName
         self.coordinates = coordinates
+    }
+}
+
+struct PublishingPlatform: Identifiable, Hashable {
+    let id: String
+    let key: String
+    let name: String
+    let iconUrl: URL?
+
+    init(key: String, name: String, iconUrl: URL?) {
+        self.id = key
+        self.key = key
+        self.name = name
+        self.iconUrl = iconUrl
     }
 }
 
@@ -116,7 +130,7 @@ enum PhotoFormat: String, CaseIterable {
     }
 }
 
-enum PublishingPlatform: String, CaseIterable, Identifiable {
+enum PublishingPlatformFilter: String, CaseIterable, Identifiable {
     case all
     case instagram
     case facebook
@@ -147,7 +161,7 @@ enum PublishingPlatform: String, CaseIterable, Identifiable {
 }
 
 extension Photo {
-    func isCompatible(with platform: PublishingPlatform) -> Bool {
+    func isCompatible(with platform: PublishingPlatformFilter) -> Bool {
         guard platform != .all else {
             return true
         }
@@ -166,8 +180,8 @@ extension Photo {
         }
     }
 
-    var destinationPlatform: PublishingPlatform? {
-        guard let platform = platform?.lowercased() else {
+    var destinationPlatform: PublishingPlatformFilter? {
+        guard let platform = platform?.key.lowercased() else {
             return nil
         }
 

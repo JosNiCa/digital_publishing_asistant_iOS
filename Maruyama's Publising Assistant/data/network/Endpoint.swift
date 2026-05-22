@@ -13,6 +13,8 @@ enum Endpoint {
     case fusionPreview(photoId: Int)
     case fusionDetail(fusionId: Int)
     case publishFusion
+    case scheduledPosts
+    case publishingHealth
     case fusionSave(photoId: Int)
     case verifyConnection
     case fusionsList
@@ -40,6 +42,12 @@ enum Endpoint {
             
         case .publishFusion:
             return "/api/publishing/publicar-fusion/"
+
+        case .scheduledPosts:
+            return "/api/publishing/programadas/"
+
+        case .publishingHealth:
+            return "/api/publishing/health/"
             
         case .fusionSave(let photoId):
             return "/api/media_library/fusion/save/\(photoId)/"
@@ -68,6 +76,10 @@ enum Endpoint {
                 return "GET"
             case .publishFusion:
                 return "POST"
+            case .scheduledPosts:
+                return "GET"
+            case .publishingHealth:
+                return "GET"
             case .fusionSave:
                 return "POST"
             case .verifyConnection:

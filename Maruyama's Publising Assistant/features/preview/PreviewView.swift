@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-enum FusionCompletionResult {
+enum FusionCompletionResult: Equatable {
     case saved
     case published
     case scheduled
@@ -39,14 +39,20 @@ struct PreviewView: View {
 
     @StateObject private var viewModel: PreviewViewModel
     private let onComplete: @MainActor (FusionCompletionResult) -> Void
+    private let onBackgroundPublishStarted: @MainActor () -> Void
+    private let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
 
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
         publishingRepository: PublishingRepository,
-        onComplete: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
+        onComplete: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in },
+        onBackgroundPublishStarted: @escaping @MainActor () -> Void = {},
+        onBackgroundPublishFinished: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
     ) {
         self.onComplete = onComplete
+        self.onBackgroundPublishStarted = onBackgroundPublishStarted
+        self.onBackgroundPublishFinished = onBackgroundPublishFinished
         _viewModel = StateObject(
             wrappedValue: PreviewViewModel(
                 input: input,
@@ -57,17 +63,37 @@ struct PreviewView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-
-            contentImage
-            captionInput
-            scheduleSection
-            actionsSection
-
-            Spacer()
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                contentImage
+                captionInput
+                scheduleSection
+                actionsSection
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
         }
-        .padding()
         .navigationTitle("Preview")
+        .navigationBarTitleDisplayMode(.inline)
+        .appScreenBackground()
+    }
+
+    var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionEyebrow("Publicación", systemImage: "paperplane.fill")
+
+            Text("Revisa antes de enviar")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(AppColors.ink)
+
+            Text("Ajusta el caption, programa si hace falta y guarda la fusión para continuar después.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 }
 
@@ -79,54 +105,76 @@ private extension PreviewView {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
-                    .cornerRadius(12)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else if let imageUrl = viewModel.imageUrl {
                 AsyncImage(url: imageUrl) { phase in
                     switch phase {
                     case .empty:
-                        ProgressView("Cargando imagen...")
+                        ZStack {
+                            AppColors.field
+                            ProgressView("Cargando imagen...")
+                        }
                     case .success(let image):
                         image
                             .resizable()
                             .scaledToFit()
-                            .cornerRadius(12)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     case .failure:
-                        Text("Error al cargar la imagen")
-                            .foregroundColor(.red)
+                        EmptyStateView(
+                            title: "Imagen no disponible",
+                            message: "No pudimos cargar la previsualización de esta fusión.",
+                            systemImage: "photo.badge.exclamationmark"
+                        )
                     @unknown default:
                         EmptyView()
                     }
                 }
             } else {
-                ProgressView("Cargando imagen...")
+                ZStack {
+                    AppColors.field
+                    ProgressView("Cargando imagen...")
+                }
             }
         }
+        .frame(maxWidth: .infinity)
+        .background(AppColors.elevated)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: .black.opacity(0.06), radius: 18, x: 0, y: 8)
     }
 }
 
 private extension PreviewView {
 
     var captionInput: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
 
-            Text("Caption")
-                .font(.headline)
+            HStack {
+                SectionEyebrow("Caption", systemImage: "text.quote")
+
+                Spacer()
+
+                Text("\(viewModel.caption.count) caracteres")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
 
             TextEditor(text: $viewModel.caption)
-                .frame(height: 120)
-                .padding(8)
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(10)
+                .font(.body)
+                .frame(minHeight: 130)
+                .padding(10)
+                .scrollContentBackground(.hidden)
+                .background(AppColors.field)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 }
 
 private extension PreviewView {
     var scheduleSection: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 12) {
 
-            Text("Programar publicación")
-                .font(.headline)
+            SectionEyebrow("Programación", systemImage: "calendar.badge.clock")
 
             DatePicker(
                 "Fecha",
@@ -136,48 +184,54 @@ private extension PreviewView {
                 ),
                 displayedComponents: [.date, .hourAndMinute]
             )
+            .datePickerStyle(.compact)
         }
+        .appCard(cornerRadius: 22, padding: 16)
     }
 }
 
 private extension PreviewView {
 
     var actionsSection: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             
             if viewModel.isLoading {
-                ProgressView()
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Procesando publicación...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
+                messageBanner(error, systemImage: "exclamationmark.triangle.fill", tint: AppColors.brand)
             }
 
             if let success = viewModel.successMessage {
-                Text(success)
-                    .foregroundColor(.green)
+                messageBanner(success, systemImage: "checkmark.circle.fill", tint: AppColors.positive)
             }
 
             HStack(spacing: 12) {
                 
-                Button("Guardar") {
+                Button {
                     Task {
                         if await viewModel.saveFusion() {
                             onComplete(.saved)
                         }
                     }
+                } label: {
+                    Label("Guardar", systemImage: "tray.and.arrow.down.fill")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(SecondaryCapsuleButtonStyle())
 
-                Button("Publicar") {
-                    Task {
-                        if await viewModel.publish() {
-                            onComplete(viewModel.scheduledDate == nil ? .published : .scheduled)
-                        }
-                    }
+                Button {
+                    publishInBackground()
+                } label: {
+                    Label(viewModel.scheduledDate == nil ? "Publicar" : "Programar", systemImage: "paperplane.fill")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PrimaryCapsuleButtonStyle(isEnabled: !viewModel.isLoading))
+                .disabled(viewModel.isLoading)
             }
 
             if viewModel.canRetryPublish {
@@ -186,5 +240,43 @@ private extension PreviewView {
                     .foregroundColor(.secondary)
             }
         }
+        .appCard(cornerRadius: 22, padding: 16)
+    }
+
+    func publishInBackground() {
+        guard viewModel.canStartPublishing() else { return }
+
+        let result: FusionCompletionResult = viewModel.scheduledDate == nil ? .published : .scheduled
+        let activity = PublishingActivityCenter.shared
+        let publisher = viewModel
+
+        activity.begin(isScheduled: result == .scheduled)
+        onBackgroundPublishStarted()
+
+        Task {
+            let didPublish = await publisher.publish()
+
+            await MainActor.run {
+                if didPublish {
+                    activity.complete(result)
+                    onBackgroundPublishFinished(result)
+                } else {
+                    activity.fail(publisher.errorMessage ?? "No pudimos completar la publicación.")
+                }
+            }
+        }
+    }
+
+    func messageBanner(_ text: String, systemImage: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(tint)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

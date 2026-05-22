@@ -55,4 +55,3 @@ final class LoginViewModel: ObservableObject {
         isLoading = false
     }
 }
-

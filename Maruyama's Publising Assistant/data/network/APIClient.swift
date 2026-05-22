@@ -65,7 +65,7 @@ final public class APIClient {
             }
 
             guard (200..<300).contains(httpResponse.statusCode) else {
-                if httpResponse.statusCode == 401 {
+                if httpResponse.statusCode == 401, requiresAuth {
                     if requiresAuth, auth.token != nil {
                         await MainActor.run {
                             SessionManager.shared.handleUnauthorized()

@@ -5,13 +5,15 @@
 //  Created by LJD Technology on 01/05/26.
 //
 
+import Foundation
+
 struct ConnectionStatus {
     let isConnected: Bool
     let facebookConnected: Bool
     let instagramConnected: Bool
     let facebookPageId: String?
     let instagramUserId: String?
-    let userId: Int?
+    let distributorId: Int?
     let message: String?
 
     init(
@@ -20,7 +22,7 @@ struct ConnectionStatus {
         instagramConnected: Bool = false,
         facebookPageId: String? = nil,
         instagramUserId: String? = nil,
-        userId: Int? = nil,
+        distributorId: Int? = nil,
         message: String? = nil
     ) {
         self.isConnected = isConnected
@@ -28,11 +30,25 @@ struct ConnectionStatus {
         self.instagramConnected = instagramConnected
         self.facebookPageId = facebookPageId
         self.instagramUserId = instagramUserId
-        self.userId = userId
+        self.distributorId = distributorId
         self.message = message
     }
 
     var metaTokenConfigured: Bool {
         isConnected || facebookPageId != nil || instagramUserId != nil
     }
+}
+
+struct ScheduledPost: Identifiable, Hashable {
+    let id: String
+    let message: String
+    let scheduledPublishTime: Date?
+    let createdTime: Date?
+    let permalinkUrl: String?
+}
+
+struct PublishingHealthStatus: Hashable {
+    let status: String
+    let service: String
+    let timestamp: String?
 }

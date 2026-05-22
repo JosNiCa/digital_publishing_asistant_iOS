@@ -5,6 +5,8 @@
 //  Created by LJD Technology on 26/03/26.
 //
 
+import Foundation
+
 struct PhotosResponseDTO: Decodable {
     let count: Int?
     let next: String?
@@ -36,13 +38,40 @@ struct PhotosResponseDTO: Decodable {
     }
 }
 
+struct PlatformDTO: Decodable {
+    let key: String
+    let name: String
+    let iconUrl: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case key
+        case name
+        case iconUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(),
+           let key = try? container.decode(String.self) {
+            self.key = key
+            self.name = key
+            self.iconUrl = nil
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.key = try container.decode(String.self, forKey: .key)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.iconUrl = try container.decodeIfPresent(String.self, forKey: .iconUrl)
+    }
+}
+
 struct PhotoDTO: Decodable {
     let id: Int
     let imageUrl: String
     let width: Int?
     let height: Int?
     let formato: String?
-    let platform: String?
+    let platform: PlatformDTO?
     let origen: String?
     let fechaCarga: String?
     let enUso: Bool?
@@ -80,7 +109,7 @@ struct PhotoDTO: Decodable {
         self.width = try container.decodeIfPresent(Int.self, forKey: .width)
         self.height = try container.decodeIfPresent(Int.self, forKey: .height)
         self.formato = try container.decodeIfPresent(String.self, forKey: .formato)
-        self.platform = try container.decodeIfPresent(String.self, forKey: .platform)
+        self.platform = try container.decodeIfPresent(PlatformDTO.self, forKey: .platform)
         self.origen = try container.decodeIfPresent(String.self, forKey: .origen)
         self.fechaCarga = try container.decodeIfPresent(String.self, forKey: .fechaCarga)
             ?? container.decodeIfPresent(String.self, forKey: .fechaCargaSnake)
@@ -94,6 +123,16 @@ struct PhotoDTO: Decodable {
     }
 }
 
+extension PlatformDTO {
+    func toDomain() -> PublishingPlatform {
+        PublishingPlatform(
+            key: key,
+            name: name,
+            iconUrl: iconUrl.flatMap(URL.init(string:))
+        )
+    }
+}
+
 extension PhotoDTO {
     func toDomain() -> Photo {
         Photo(
@@ -102,7 +141,7 @@ extension PhotoDTO {
             width: width,
             height: height,
             serverFormat: formato,
-            platform: platform,
+            platform: platform?.toDomain(),
             origin: origen,
             createdAt: fechaCarga,
             isInUse: enUso,

@@ -229,6 +229,22 @@ final class PreviewViewModel: ObservableObject {
         }
     }
 
+    func canStartPublishing() -> Bool {
+        guard !isLoading else { return false }
+
+        guard !caption.trimmingCharacters(in: .whitespaces).isEmpty else {
+            errorMessage = "El caption no puede estar vacío"
+            return false
+        }
+
+        if let date = scheduledDate, date < Date() {
+            errorMessage = "No puedes programar en el pasado"
+            return false
+        }
+
+        return true
+    }
+
     private func captionForRequest() -> String? {
         let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
