@@ -19,8 +19,9 @@ struct PhotoListView: View {
     @State private var submittedSearchText = ""
     @State private var isShowingFilters = false
     @State private var selectedFormats: Set<PhotoFormat> = []
-    @State private var selectedOrigins: Set<String> = []
     @State private var selectedStates: Set<String> = []
+    @State private var countryFilterText = ""
+    @State private var productFilterText = ""
     @State private var coordinateFilter: PhotoCoordinateFilter = .all
     @State private var contentFilter: PhotoContentFilter = .all
     @State private var platformFilter: PublishingPlatformFilter = .all
@@ -195,10 +196,10 @@ struct PhotoListView: View {
     private var filteredPhotos: [Photo] {
         let photos = viewModel.photos.filter { photo in
             let matchesFormat = selectedFormats.isEmpty || selectedFormats.contains(photo.format)
-            let matchesOrigin = selectedOrigins.isEmpty
-                || selectedOrigins.contains(photo.origin ?? "")
             let matchesState = selectedStates.isEmpty
                 || selectedStates.contains(photo.state ?? "")
+            let matchesCountry = matchesOriginFilter(countryFilterText, in: photo.origin)
+            let matchesProduct = matchesFilterText(productFilterText, in: photo.productName)
             let matchesCoordinates: Bool
             let matchesContent: Bool
             let matchesPlatform = photo.isCompatible(with: platformFilter)
@@ -241,8 +242,9 @@ struct PhotoListView: View {
             }
 
             return matchesFormat
-                && matchesOrigin
                 && matchesState
+                && matchesCountry
+                && matchesProduct
                 && matchesCoordinates
                 && matchesContent
                 && matchesPlatform
@@ -473,6 +475,32 @@ struct PhotoListView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("País")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                AutocompleteFilterField(
+                    placeholder: "Escribe un país",
+                    systemImage: "globe.americas.fill",
+                    text: $countryFilterText,
+                    suggestions: countryFilterSuggestions
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Producto")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+
+                AutocompleteFilterField(
+                    placeholder: "Escribe un producto",
+                    systemImage: "shippingbox.fill",
+                    text: $productFilterText,
+                    suggestions: productFilterSuggestions
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Contenido")
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.secondary)
@@ -483,16 +511,6 @@ struct PhotoListView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-            }
-
-            if !availableOrigins.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Origen")
-                        .font(.caption.weight(.semibold))
-                        .foregroundColor(.secondary)
-
-                    horizontalChips(availableOrigins, selected: selectedOrigins, toggle: toggleOrigin)
-                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -590,7 +608,8 @@ struct PhotoListView: View {
             : 0
 
         return selectedFormats.count
-            + selectedOrigins.count
+            + (countryFilterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
+            + (productFilterText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0 : 1)
             + (contentFilter == .all ? 0 : 1)
             + (platformFilter == .all ? 0 : 1)
             + (sortOrder == .newest ? 0 : 1)
@@ -617,14 +636,6 @@ struct PhotoListView: View {
         }
     }
 
-    private func toggleOrigin(_ origin: String) {
-        if selectedOrigins.contains(origin) {
-            selectedOrigins.remove(origin)
-        } else {
-            selectedOrigins.insert(origin)
-        }
-    }
-
     private func toggleState(_ state: String) {
         if selectedStates.contains(state) {
             selectedStates.remove(state)
@@ -635,8 +646,9 @@ struct PhotoListView: View {
 
     private func clearFilters() {
         selectedFormats = []
-        selectedOrigins = []
         selectedStates = []
+        countryFilterText = ""
+        productFilterText = ""
         coordinateFilter = .all
         contentFilter = .all
         platformFilter = .all
@@ -692,12 +704,85 @@ struct PhotoListView: View {
         value.normalizedForPhotoSearch
     }
 
-    private var availableOrigins: [String] {
-        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.origin) })).sorted()
-    }
-
     private var availableStates: [String] {
         Array(Set(viewModel.photos.compactMap { valueIfPresent($0.state) })).sorted()
+    }
+
+    private var availableCountries: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.origin) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var availableProducts: [String] {
+        Array(Set(viewModel.photos.compactMap { valueIfPresent($0.productName) }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var countryFilterSuggestions: [String] {
+        autocompleteSuggestions(matching: countryFilterText, in: availableCountries)
+    }
+
+    private var productFilterSuggestions: [String] {
+        autocompleteSuggestions(matching: productFilterText, in: availableProducts)
+    }
+
+    private func matchesFilterText(_ filterText: String, in value: String?) -> Bool {
+        let query = normalized(filterText)
+        guard !query.isEmpty else { return true }
+
+        return normalized(value ?? "").contains(query)
+    }
+
+    private func matchesOriginFilter(_ filterText: String, in origin: String?) -> Bool {
+        let query = normalized(filterText)
+        guard !query.isEmpty else { return true }
+
+        return originSearchValues(for: origin).contains {
+            $0.contains(query) || query.contains($0)
+        }
+    }
+
+    private func autocompleteSuggestions(matching queryText: String, in values: [String]) -> [String] {
+        let query = normalized(queryText)
+        guard !query.isEmpty else { return [] }
+
+        return values
+            .filter { normalized($0).contains(query) }
+            .sorted { lhs, rhs in
+                let lhsStarts = normalized(lhs).hasPrefix(query)
+                let rhsStarts = normalized(rhs).hasPrefix(query)
+
+                if lhsStarts != rhsStarts {
+                    return lhsStarts
+                }
+
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+            .prefix(6)
+            .map { $0 }
+    }
+
+    private func originSearchValues(for origin: String?) -> [String] {
+        guard let origin = valueIfPresent(origin) else { return [] }
+
+        var values = Set([normalized(origin)])
+
+        if let aliases = countryAliases[normalized(origin)] {
+            values.formUnion(aliases.map(normalized))
+        }
+
+        return Array(values)
+    }
+
+    private var countryAliases: [String: [String]] {
+        [
+            "mexico": ["mx"],
+            "mx": ["mexico"],
+            "colombia": ["co"],
+            "co": ["colombia"],
+            "ecuador": ["ec"],
+            "ec": ["ecuador"]
+        ]
     }
 
     private func valueIfPresent(_ value: String?) -> String? {
@@ -835,6 +920,84 @@ private struct FilterChip: View {
     }
 }
 
+private struct AutocompleteFilterField: View {
+    let placeholder: String
+    let systemImage: String
+    @Binding var text: String
+    let suggestions: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppColors.brand)
+                    .frame(width: 18)
+
+                TextField(placeholder, text: $text)
+                    .font(.subheadline)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Button {
+                        text = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Limpiar")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(AppColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            if !suggestions.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(suggestions.enumerated()), id: \.element) { index, suggestion in
+                        Button {
+                            text = suggestion
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "text.magnifyingglass")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppColors.brand)
+                                    .frame(width: 18)
+
+                                Text(suggestion)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(AppColors.ink)
+                                    .lineLimit(1)
+
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        if index < suggestions.count - 1 {
+                            Divider()
+                                .padding(.leading, 40)
+                        }
+                    }
+                }
+                .background(Color(.systemBackground))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(AppColors.brand.opacity(0.10), lineWidth: 1)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+    }
+}
+
 private struct PhotoFormatSection: View {
     let title: String
     let format: PhotoFormat
@@ -873,7 +1036,7 @@ private struct PhotoFormatSection: View {
                 }
             } else {
                 LazyVStack(spacing: 10) {
-                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
+                    ForEach(Array(photos.chunked(into: 4).enumerated()), id: \.offset) { index, blockPhotos in
                         PhotoRenderBlock(
                             blockIndex: index,
                             format: format,
@@ -908,7 +1071,7 @@ private struct PhotoRenderBlock: View {
     }
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             blockContent
                 .opacity(isReady ? 1 : 0)
                 .allowsHitTesting(isReady)
@@ -943,15 +1106,25 @@ private struct PhotoRenderBlock: View {
                 }
             }
         } else {
-            LazyVGrid(columns: compactColumns, spacing: 10) {
-                ForEach(photos) { photo in
-                    PhotoCell(
-                        photo: photo,
-                        aspectRatio: format.displayAspectRatio,
-                        onRenderComplete: markLoaded
-                    )
-                    .onTapGesture {
-                        onSelect(photo)
+            LazyVStack(spacing: 10) {
+                ForEach(Array(photos.chunked(into: 2).enumerated()), id: \.offset) { _, rowPhotos in
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(rowPhotos) { photo in
+                            PhotoCell(
+                                photo: photo,
+                                aspectRatio: format.displayAspectRatio,
+                                onRenderComplete: markLoaded
+                            )
+                            .onTapGesture {
+                                onSelect(photo)
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+
+                        if rowPhotos.count == 1 {
+                            Spacer(minLength: 0)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 }
             }
@@ -1029,10 +1202,13 @@ private struct PhotoCell: View {
     let aspectRatio: Double
     let onRenderComplete: (Photo) -> Void
     @State private var didCompleteRender = false
+    @State private var imageRetryID = 0
+
+    private let maxImageRetries = 3
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: URL(string: photo.imageUrl)) { phase in
+            AsyncImage(url: resolvedImageURL) { phase in
                 switch phase {
                 case .empty:
                     ZStack {
@@ -1049,19 +1225,35 @@ private struct PhotoCell: View {
                 case .failure:
                     ZStack {
                         AppColors.field
-                        Image(systemName: "photo")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
+                        if imageRetryID < maxImageRetries {
+                            ProgressView()
+                        } else {
+                            Button {
+                                didCompleteRender = false
+                                imageRetryID = 0
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.title2.weight(.semibold))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 44, height: 44)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Reintentar imagen")
+                        }
                     }
                     .onAppear {
-                        completeRenderIfNeeded()
+                        retryImageOrComplete()
                     }
                 @unknown default:
                     EmptyView()
                 }
             }
+            .id("\(photo.id)-\(imageRetryID)-\(resolvedImageURL?.absoluteString ?? photo.imageUrl)")
             .onChange(of: photo.id) { _, _ in
                 didCompleteRender = false
+                imageRetryID = 0
             }
 
             LinearGradient(
@@ -1141,6 +1333,26 @@ private struct PhotoCell: View {
         didCompleteRender = true
         onRenderComplete(photo)
     }
+
+    private func retryImageOrComplete() {
+        guard imageRetryID < maxImageRetries else {
+            completeRenderIfNeeded()
+            return
+        }
+
+        let nextRetryID = imageRetryID + 1
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(nextRetryID) * 450_000_000)
+            await MainActor.run {
+                guard imageRetryID < nextRetryID else { return }
+                imageRetryID = nextRetryID
+            }
+        }
+    }
+
+    private var resolvedImageURL: URL? {
+        photo.imageUrl.resolvedMediaURL
+    }
 }
 
 private extension Array {
@@ -1194,5 +1406,25 @@ private extension String {
         folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    var resolvedMediaURL: URL? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let url = URL(string: trimmed), url.scheme != nil {
+            return url
+        }
+
+        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? trimmed
+        if let url = URL(string: encoded), url.scheme != nil {
+            return url
+        }
+
+        if trimmed.hasPrefix("/") {
+            return URL(string: trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
+        }
+
+        return URL(string: "/" + trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
     }
 }

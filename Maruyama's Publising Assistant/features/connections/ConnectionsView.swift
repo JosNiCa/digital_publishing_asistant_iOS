@@ -116,6 +116,7 @@ struct ConnectionsView: View {
                     subtitle: status.facebookPageId.map { "Página conectada: \($0)" }
                         ?? "Sin página conectada",
                     systemImage: "f.circle.fill",
+                    iconURL: SocialPlatformAsset.facebookIconURL,
                     isConnected: status.facebookConnected
                 )
 
@@ -124,6 +125,7 @@ struct ConnectionsView: View {
                     subtitle: status.instagramUserId.map { "Cuenta conectada: \($0)" }
                         ?? "Sin cuenta Business conectada",
                     systemImage: "camera.fill",
+                    iconURL: SocialPlatformAsset.instagramIconURL,
                     isConnected: status.instagramConnected
                 )
             }
@@ -204,6 +206,7 @@ private struct ConnectionStatusRow: View {
     let title: String
     let subtitle: String
     let systemImage: String
+    var iconURL: URL? = nil
     let isConnected: Bool
 
     var body: some View {
@@ -213,8 +216,7 @@ private struct ConnectionStatusRow: View {
                     .fill(isConnected ? AppColors.positive.opacity(0.14) : AppColors.warning.opacity(0.14))
                     .frame(width: 42, height: 42)
 
-                Image(systemName: systemImage)
-                    .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+                platformIcon
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -239,4 +241,36 @@ private struct ConnectionStatusRow: View {
         .background(AppColors.field)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+
+    @ViewBuilder
+    private var platformIcon: some View {
+        if let iconURL {
+            AsyncImage(url: iconURL) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .controlSize(.mini)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    Image(systemName: systemImage)
+                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+                @unknown default:
+                    Image(systemName: systemImage)
+                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+                }
+            }
+            .frame(width: 22, height: 22)
+        } else {
+            Image(systemName: systemImage)
+                .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
+        }
+    }
+}
+
+private enum SocialPlatformAsset {
+    static let facebookIconURL = URL(string: "https://ljdit.com/static/platforms/facebook.png")
+    static let instagramIconURL = URL(string: "https://ljdit.com/static/platforms/instagram.png")
 }
