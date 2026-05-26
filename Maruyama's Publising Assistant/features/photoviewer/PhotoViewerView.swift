@@ -154,7 +154,7 @@ struct PhotoViewerView: View {
     private var imageSection: some View {
         ZStack {
             if let base64 = viewModel.fusionImageBase64,
-               let uiImage = uiImage(fromBase64: base64) {
+               let uiImage = ImageDataDecoder.image(fromBase64: base64) {
                 logoPreviewImage(uiImage)
             } else {
                 remotePhotoImage
@@ -274,16 +274,16 @@ struct PhotoViewerView: View {
     }
 
     private var remotePhotoImage: some View {
-        AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
-            switch phase {
-            case .empty:
+        RetryingRemoteImage(url: viewModel.photo.imageUrl.resolvedMediaURL) { state, _ in
+            switch state {
+            case .loading:
                 ZStack {
                     AppColors.field
                     ProgressView()
                 }
                 .frame(maxWidth: .infinity, minHeight: 260)
             case .success(let image):
-                image
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
             case .failure:
@@ -292,8 +292,6 @@ struct PhotoViewerView: View {
                     message: "No pudimos cargar el archivo original.",
                     systemImage: "photo.badge.exclamationmark"
                 )
-            default:
-                EmptyView()
             }
         }
     }
@@ -352,20 +350,6 @@ struct PhotoViewerView: View {
         return (CGFloat(y) / imageHeight) * viewHeight
     }
 
-    private func uiImage(fromBase64 base64: String) -> UIImage? {
-        let cleanedBase64 = base64
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: "\r", with: "")
-            .replacingOccurrences(of: "data:image/png;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-
-        guard let data = Data(base64Encoded: cleanedBase64) else {
-            return nil
-        }
-
-        return UIImage(data: data)
-    }
 }
 
 private struct DistributorLogoTile: View {
@@ -381,12 +365,12 @@ private struct DistributorLogoTile: View {
                         .fill(isSelected ? AppColors.brand.opacity(0.10) : AppColors.field)
                         .frame(height: 70)
 
-                    AsyncImage(url: URL(string: distributor.logoUrl)) { phase in
-                        switch phase {
-                        case .empty:
+                    RetryingRemoteImage(url: distributor.logoUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+                        switch state {
+                        case .loading:
                             ProgressView()
                         case .success(let image):
-                            image
+                            Image(uiImage: image)
                                 .resizable()
                                 .scaledToFit()
                                 .padding(12)
@@ -394,8 +378,6 @@ private struct DistributorLogoTile: View {
                             Text(String(distributor.name.prefix(2)).uppercased())
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(AppColors.brand)
-                        default:
-                            EmptyView()
                         }
                     }
                 }

@@ -107,15 +107,15 @@ private extension PreviewView {
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else if let imageUrl = viewModel.imageUrl {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
+                RetryingRemoteImage(url: imageUrl) { state, _ in
+                    switch state {
+                    case .loading:
                         ZStack {
                             AppColors.field
                             ProgressView("Cargando imagen...")
                         }
                     case .success(let image):
-                        image
+                        Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -125,8 +125,6 @@ private extension PreviewView {
                             message: "No pudimos cargar la previsualización de esta fusión.",
                             systemImage: "photo.badge.exclamationmark"
                         )
-                    @unknown default:
-                        EmptyView()
                     }
                 }
             } else {

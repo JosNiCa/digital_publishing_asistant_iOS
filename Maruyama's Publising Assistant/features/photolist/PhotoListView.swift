@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct PhotoListView: View {
     
@@ -1291,9 +1290,9 @@ private struct PhotoCell: View {
     private var platformIcon: some View {
         if let platform = photo.platform,
            let iconUrl = platform.iconUrl {
-            AsyncImage(url: iconUrl) { phase in
-                switch phase {
-                case .empty:
+            RetryingRemoteImage(url: iconUrl, maxRetries: 1) { state, _ in
+                switch state {
+                case .loading:
                     ProgressView()
                         .controlSize(.mini)
                         .frame(width: 24, height: 24)
@@ -1301,7 +1300,7 @@ private struct PhotoCell: View {
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 case .success(let image):
-                    image
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
@@ -1309,8 +1308,6 @@ private struct PhotoCell: View {
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 case .failure:
-                    EmptyView()
-                @unknown default:
                     EmptyView()
                 }
             }
@@ -1327,121 +1324,6 @@ private struct PhotoCell: View {
 
     private var resolvedImageURL: URL? {
         photo.imageUrl.resolvedMediaURL
-    }
-}
-
-private enum RetryingRemoteImageState {
-    case loading
-    case success(UIImage)
-    case failure
-}
-
-private struct RetryingRemoteImage<Content: View>: View {
-    let url: URL?
-    let maxRetries: Int
-    let onSuccess: () -> Void
-    let onFinalFailure: () -> Void
-    @ViewBuilder let content: (RetryingRemoteImageState, @escaping () -> Void) -> Content
-
-    @State private var state: RetryingRemoteImageState = .loading
-    @State private var loadID = UUID()
-
-    var body: some View {
-        content(state, retry)
-            .task(id: loadID) {
-                await loadImage()
-            }
-            .onChange(of: url) { _, _ in
-                state = .loading
-                loadID = UUID()
-            }
-    }
-
-    private func retry() {
-        state = .loading
-        loadID = UUID()
-    }
-
-    private func loadImage() async {
-        guard let url else {
-            await MainActor.run {
-                state = .failure
-                onFinalFailure()
-            }
-            return
-        }
-
-        if let cachedImage = PhotoImageCache.shared.image(for: url) {
-            await MainActor.run {
-                state = .success(cachedImage)
-                onSuccess()
-            }
-            return
-        }
-
-        let delays: [UInt64] = [150_000_000, 350_000_000, 650_000_000]
-        for attempt in 0...maxRetries {
-            if Task.isCancelled { return }
-
-            if let image = await PhotoImageLoader.image(from: url) {
-                await MainActor.run {
-                    state = .success(image)
-                    onSuccess()
-                }
-                return
-            }
-
-            guard attempt < maxRetries else { break }
-            let delay = delays[min(attempt, delays.count - 1)]
-            try? await Task.sleep(nanoseconds: delay)
-        }
-
-        await MainActor.run {
-            state = .failure
-            onFinalFailure()
-        }
-    }
-}
-
-private enum PhotoImageLoader {
-    static func image(from url: URL) async -> UIImage? {
-        if let cachedImage = PhotoImageCache.shared.image(for: url) {
-            return cachedImage
-        }
-
-        var request = URLRequest(url: url)
-        request.cachePolicy = .returnCacheDataElseLoad
-        request.timeoutInterval = 12
-
-        guard
-            let (data, _) = try? await URLSession.shared.data(for: request),
-            let image = UIImage(data: data)
-        else {
-            return nil
-        }
-
-        PhotoImageCache.shared.setImage(image, for: url)
-        return image
-    }
-}
-
-private final class PhotoImageCache {
-    static let shared = PhotoImageCache()
-
-    private let cache = NSCache<NSURL, UIImage>()
-
-    private init() {
-        cache.countLimit = 220
-        cache.totalCostLimit = 90 * 1024 * 1024
-    }
-
-    func image(for url: URL) -> UIImage? {
-        cache.object(forKey: url as NSURL)
-    }
-
-    func setImage(_ image: UIImage, for url: URL) {
-        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-        cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
 }
 
@@ -1496,25 +1378,5 @@ private extension String {
         folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-    }
-
-    var resolvedMediaURL: URL? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        if let url = URL(string: trimmed), url.scheme != nil {
-            return url
-        }
-
-        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? trimmed
-        if let url = URL(string: encoded), url.scheme != nil {
-            return url
-        }
-
-        if trimmed.hasPrefix("/") {
-            return URL(string: trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
-        }
-
-        return URL(string: "/" + trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
     }
 }

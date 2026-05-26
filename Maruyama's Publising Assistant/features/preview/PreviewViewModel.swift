@@ -82,11 +82,7 @@ final class PreviewViewModel: ObservableObject {
             return
         }
         
-        let cleanedBase64 = imageBase64
-            .replacingOccurrences(of: "\n", with: "")
-        
-        guard let data = Data(base64Encoded: cleanedBase64),
-              let uiImage = UIImage(data: data) else {
+        guard let uiImage = ImageDataDecoder.image(fromBase64: imageBase64) else {
             self.errorMessage = "Error al procesar la imagen"
             return
         }

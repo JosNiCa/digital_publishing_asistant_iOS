@@ -73,7 +73,7 @@ final class PhotoViewerViewModel: ObservableObject {
         fusionImageBase64 = option.preview.imageBase64
 
         if previewImageSize == nil {
-            previewImageSize = imageSize(fromBase64: option.preview.imageBase64)
+            previewImageSize = ImageDataDecoder.imageSize(fromBase64: option.preview.imageBase64)
         }
     }
     
@@ -106,7 +106,7 @@ final class PhotoViewerViewModel: ObservableObject {
                     )
                 )
             }
-            previewImageSize = imageSize(fromBase64: result.imageBase64)
+            previewImageSize = ImageDataDecoder.imageSize(fromBase64: result.imageBase64)
             
         } catch {
             self.errorMessage = "Error al generar la imagen"
@@ -129,67 +129,61 @@ final class PhotoViewerViewModel: ObservableObject {
     private func loadPositionOptions(for distributorId: Int) async {
         isLoadingPositions = true
 
-        var options: [LogoPositionOption] = []
-        var firstImageSize: CGSize?
-
         let availableCoordinates = photo.coordinates.map(\.id)
         let coordinateIds = availableCoordinates.isEmpty ? Array(1...3) : availableCoordinates
+        let photoId = photo.id
+        let fusionRepository = fusionRepository
 
-        for coordinate in coordinateIds {
-            do {
-                let result = try await fusionRepository.applyFusion(
-                    photoId: photo.id,
-                    distributorId: distributorId,
-                    coordinate: coordinate,
-                    caption: nil
-                )
+        let options = await withTaskGroup(of: LogoPositionOption?.self) { group in
+            for coordinate in coordinateIds {
+                group.addTask {
+                    do {
+                        let result = try await fusionRepository.applyFusion(
+                            photoId: photoId,
+                            distributorId: distributorId,
+                            coordinate: coordinate,
+                            caption: nil
+                        )
 
-                guard let x = result.x,
-                      let y = result.y,
-                      let resultCoordinate = result.coordinate else {
-                    continue
+                        guard let x = result.x,
+                              let y = result.y,
+                              let resultCoordinate = result.coordinate else {
+                            return nil
+                        }
+
+                        return LogoPositionOption(
+                            id: resultCoordinate,
+                            x: x,
+                            y: y,
+                            preview: result
+                        )
+                    } catch {
+                        return nil
+                    }
                 }
-
-                if firstImageSize == nil {
-                    firstImageSize = imageSize(fromBase64: result.imageBase64)
-                }
-
-                options.append(
-                    LogoPositionOption(
-                        id: resultCoordinate,
-                        x: x,
-                        y: y,
-                        preview: result
-                    )
-                )
-            } catch {
-                continue
             }
+
+            var loadedOptions: [LogoPositionOption] = []
+            for await option in group {
+                if let option {
+                    loadedOptions.append(option)
+                }
+            }
+
+            return loadedOptions.sorted { $0.id < $1.id }
         }
 
-        positionOptions = options.sorted { $0.id < $1.id }
-        previewImageSize = firstImageSize
+        guard selectedDistributorId == distributorId else {
+            return
+        }
+
+        positionOptions = options
+        previewImageSize = options.first.map { ImageDataDecoder.imageSize(fromBase64: $0.preview.imageBase64) } ?? nil
 
         if options.isEmpty {
             errorMessage = "Esta imagen no tiene posiciones disponibles para el logo seleccionado"
         }
 
         isLoadingPositions = false
-    }
-
-    private func imageSize(fromBase64 base64: String) -> CGSize? {
-        let cleanedBase64 = base64
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: "\r", with: "")
-            .replacingOccurrences(of: "data:image/png;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-
-        guard let data = Data(base64Encoded: cleanedBase64),
-              let image = UIImage(data: data) else {
-            return nil
-        }
-
-        return image.size
     }
 }
