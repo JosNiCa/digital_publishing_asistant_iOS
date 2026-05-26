@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct PhotoListView: View {
     
@@ -1202,58 +1203,48 @@ private struct PhotoCell: View {
     let aspectRatio: Double
     let onRenderComplete: (Photo) -> Void
     @State private var didCompleteRender = false
-    @State private var imageRetryID = 0
 
     private let maxImageRetries = 3
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: resolvedImageURL) { phase in
-                switch phase {
-                case .empty:
+            RetryingRemoteImage(
+                url: resolvedImageURL,
+                maxRetries: maxImageRetries,
+                onSuccess: completeRenderIfNeeded,
+                onFinalFailure: completeRenderIfNeeded
+            ) { state, retry in
+                switch state {
+                case .loading:
                     ZStack {
                         AppColors.field
                         ProgressView()
                     }
                 case .success(let image):
-                    image
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .onAppear {
-                            completeRenderIfNeeded()
-                        }
                 case .failure:
                     ZStack {
                         AppColors.field
-                        if imageRetryID < maxImageRetries {
-                            ProgressView()
-                        } else {
-                            Button {
-                                didCompleteRender = false
-                                imageRetryID = 0
-                            } label: {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 44, height: 44)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Reintentar imagen")
+                        Button {
+                            didCompleteRender = false
+                            retry()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.title2.weight(.semibold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 44, height: 44)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reintentar imagen")
                     }
-                    .onAppear {
-                        retryImageOrComplete()
-                    }
-                @unknown default:
-                    EmptyView()
                 }
             }
-            .id("\(photo.id)-\(imageRetryID)-\(resolvedImageURL?.absoluteString ?? photo.imageUrl)")
             .onChange(of: photo.id) { _, _ in
                 didCompleteRender = false
-                imageRetryID = 0
             }
 
             LinearGradient(
@@ -1334,24 +1325,123 @@ private struct PhotoCell: View {
         onRenderComplete(photo)
     }
 
-    private func retryImageOrComplete() {
-        guard imageRetryID < maxImageRetries else {
-            completeRenderIfNeeded()
+    private var resolvedImageURL: URL? {
+        photo.imageUrl.resolvedMediaURL
+    }
+}
+
+private enum RetryingRemoteImageState {
+    case loading
+    case success(UIImage)
+    case failure
+}
+
+private struct RetryingRemoteImage<Content: View>: View {
+    let url: URL?
+    let maxRetries: Int
+    let onSuccess: () -> Void
+    let onFinalFailure: () -> Void
+    @ViewBuilder let content: (RetryingRemoteImageState, @escaping () -> Void) -> Content
+
+    @State private var state: RetryingRemoteImageState = .loading
+    @State private var loadID = UUID()
+
+    var body: some View {
+        content(state, retry)
+            .task(id: loadID) {
+                await loadImage()
+            }
+            .onChange(of: url) { _, _ in
+                state = .loading
+                loadID = UUID()
+            }
+    }
+
+    private func retry() {
+        state = .loading
+        loadID = UUID()
+    }
+
+    private func loadImage() async {
+        guard let url else {
+            await MainActor.run {
+                state = .failure
+                onFinalFailure()
+            }
             return
         }
 
-        let nextRetryID = imageRetryID + 1
-        Task {
-            try? await Task.sleep(nanoseconds: UInt64(nextRetryID) * 450_000_000)
+        if let cachedImage = PhotoImageCache.shared.image(for: url) {
             await MainActor.run {
-                guard imageRetryID < nextRetryID else { return }
-                imageRetryID = nextRetryID
+                state = .success(cachedImage)
+                onSuccess()
             }
+            return
+        }
+
+        let delays: [UInt64] = [150_000_000, 350_000_000, 650_000_000]
+        for attempt in 0...maxRetries {
+            if Task.isCancelled { return }
+
+            if let image = await PhotoImageLoader.image(from: url) {
+                await MainActor.run {
+                    state = .success(image)
+                    onSuccess()
+                }
+                return
+            }
+
+            guard attempt < maxRetries else { break }
+            let delay = delays[min(attempt, delays.count - 1)]
+            try? await Task.sleep(nanoseconds: delay)
+        }
+
+        await MainActor.run {
+            state = .failure
+            onFinalFailure()
         }
     }
+}
 
-    private var resolvedImageURL: URL? {
-        photo.imageUrl.resolvedMediaURL
+private enum PhotoImageLoader {
+    static func image(from url: URL) async -> UIImage? {
+        if let cachedImage = PhotoImageCache.shared.image(for: url) {
+            return cachedImage
+        }
+
+        var request = URLRequest(url: url)
+        request.cachePolicy = .returnCacheDataElseLoad
+        request.timeoutInterval = 12
+
+        guard
+            let (data, _) = try? await URLSession.shared.data(for: request),
+            let image = UIImage(data: data)
+        else {
+            return nil
+        }
+
+        PhotoImageCache.shared.setImage(image, for: url)
+        return image
+    }
+}
+
+private final class PhotoImageCache {
+    static let shared = PhotoImageCache()
+
+    private let cache = NSCache<NSURL, UIImage>()
+
+    private init() {
+        cache.countLimit = 220
+        cache.totalCostLimit = 90 * 1024 * 1024
+    }
+
+    func image(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    func setImage(_ image: UIImage, for url: URL) {
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
 }
 
