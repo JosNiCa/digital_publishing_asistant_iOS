@@ -245,19 +245,16 @@ private struct ConnectionStatusRow: View {
     @ViewBuilder
     private var platformIcon: some View {
         if let iconURL {
-            AsyncImage(url: iconURL) { phase in
-                switch phase {
-                case .empty:
+            RetryingRemoteImage(url: iconURL, maxRetries: 1) { state, _ in
+                switch state {
+                case .loading:
                     ProgressView()
                         .controlSize(.mini)
                 case .success(let image):
-                    image
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
                 case .failure:
-                    Image(systemName: systemImage)
-                        .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
-                @unknown default:
                     Image(systemName: systemImage)
                         .foregroundColor(isConnected ? AppColors.positive : AppColors.warning)
                 }
