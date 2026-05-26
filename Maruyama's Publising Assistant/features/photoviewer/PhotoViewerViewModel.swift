@@ -30,9 +30,12 @@ final class PhotoViewerViewModel: ObservableObject {
     @Published var shouldNavigateToPreview = false
     @Published var positionOptions: [LogoPositionOption] = []
     @Published var previewImageSize: CGSize?
+    @Published var loadedPositionPreviewCount = 0
+    @Published var totalPositionPreviewCount = 0
 
     private let distributorRepository: DistributorRepository
     private let fusionRepository: FusionRepository
+    private var activePositionLoadID = UUID()
     
 
     init(
@@ -63,6 +66,8 @@ final class PhotoViewerViewModel: ObservableObject {
         fusionImageBase64 = nil
         positionOptions = []
         previewImageSize = nil
+        loadedPositionPreviewCount = 0
+        totalPositionPreviewCount = 0
         errorMessage = nil
 
         await loadPositionOptions(for: distributorId)
@@ -127,12 +132,16 @@ final class PhotoViewerViewModel: ObservableObject {
     }
 
     private func loadPositionOptions(for distributorId: Int) async {
+        let loadID = UUID()
+        activePositionLoadID = loadID
         isLoadingPositions = true
 
         let availableCoordinates = photo.coordinates.map(\.id)
         let coordinateIds = availableCoordinates.isEmpty ? Array(1...3) : availableCoordinates
         let photoId = photo.id
         let fusionRepository = fusionRepository
+        totalPositionPreviewCount = coordinateIds.count
+        loadedPositionPreviewCount = 0
 
         let options = await withTaskGroup(of: LogoPositionOption?.self) { group in
             for coordinate in coordinateIds {
@@ -165,6 +174,12 @@ final class PhotoViewerViewModel: ObservableObject {
 
             var loadedOptions: [LogoPositionOption] = []
             for await option in group {
+                guard activePositionLoadID == loadID else {
+                    return [LogoPositionOption]()
+                }
+
+                loadedPositionPreviewCount += 1
+
                 if let option {
                     loadedOptions.append(option)
                 }
@@ -173,7 +188,8 @@ final class PhotoViewerViewModel: ObservableObject {
             return loadedOptions.sorted { $0.id < $1.id }
         }
 
-        guard selectedDistributorId == distributorId else {
+        guard selectedDistributorId == distributorId,
+              activePositionLoadID == loadID else {
             return
         }
 

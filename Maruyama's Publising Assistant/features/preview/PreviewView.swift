@@ -196,7 +196,7 @@ private extension PreviewView {
             if viewModel.isLoading {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Procesando publicación...")
+                    Text(viewModel.loadingMessage ?? "Procesando...")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -222,6 +222,7 @@ private extension PreviewView {
                     Label("Guardar", systemImage: "tray.and.arrow.down.fill")
                 }
                 .buttonStyle(SecondaryCapsuleButtonStyle())
+                .disabled(viewModel.isLoading)
 
                 Button {
                     publishInBackground()

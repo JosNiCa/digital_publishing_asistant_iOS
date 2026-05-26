@@ -154,26 +154,28 @@ struct PhotoListView: View {
     ]
     
     private var gridView: some View {
-        ScrollView {
+        let visiblePhotos = filteredPhotos
+
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                gallerySummary
+                gallerySummary(visibleCount: visiblePhotos.count)
 
                 if isShowingSearch {
                     searchPanel
                 }
 
-                filterHeader
+                filterHeader(visibleCount: visiblePhotos.count)
 
                 if isShowingFilters {
                     filterPanel
                 }
 
-                if filteredPhotos.isEmpty {
+                if visiblePhotos.isEmpty {
                     emptyFilteredView
                 }
 
                 ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
-                    let photos = photos(for: format)
+                    let photos = photos(for: format, in: visiblePhotos)
 
                     if !photos.isEmpty {
                         PhotoFormatSection(
@@ -269,8 +271,8 @@ struct PhotoListView: View {
         }
     }
 
-    private func photos(for format: PhotoFormat) -> [Photo] {
-        filteredPhotos.filter { $0.format == format }
+    private func photos(for format: PhotoFormat, in photos: [Photo]) -> [Photo] {
+        photos.filter { $0.format == format }
     }
 
     private func selectPhoto(_ photo: Photo) {
@@ -278,7 +280,7 @@ struct PhotoListView: View {
         selectedPhoto = photo
     }
 
-    private var filterHeader: some View {
+    private func filterHeader(visibleCount: Int) -> some View {
         HStack(spacing: 12) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -308,7 +310,7 @@ struct PhotoListView: View {
 
             Spacer()
 
-            Text("\(filteredPhotos.count) fotos")
+            Text("\(visibleCount) fotos")
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
         }
@@ -407,7 +409,7 @@ struct PhotoListView: View {
         }
     }
 
-    private var gallerySummary: some View {
+    private func gallerySummary(visibleCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 7) {
@@ -435,7 +437,7 @@ struct PhotoListView: View {
                 StatusBadge(text: "\(viewModel.photos.count) totales", systemImage: "photo.on.rectangle", tint: AppColors.softInk)
 
                 if activeFilterCount > 0 {
-                    StatusBadge(text: "\(filteredPhotos.count) visibles", systemImage: "eye.fill", tint: AppColors.brand)
+                    StatusBadge(text: "\(visibleCount) visibles", systemImage: "eye.fill", tint: AppColors.brand)
                 }
 
                 if !submittedSearchText.isEmpty {
@@ -1061,9 +1063,14 @@ private struct PhotoRenderBlock: View {
     let onSelect: (Photo) -> Void
 
     @State private var loadedPhotoIDs: Set<Int> = []
+    @State private var didReachRevealTimeout = false
 
     private var isReady: Bool {
         loadedPhotoIDs.count >= photos.count
+    }
+
+    private var shouldRevealContent: Bool {
+        isReady || didReachRevealTimeout
     }
 
     private var photoIDs: [Int] {
@@ -1073,10 +1080,10 @@ private struct PhotoRenderBlock: View {
     var body: some View {
         ZStack(alignment: .top) {
             blockContent
-                .opacity(isReady ? 1 : 0)
-                .allowsHitTesting(isReady)
+                .opacity(shouldRevealContent ? 1 : 0)
+                .allowsHitTesting(shouldRevealContent)
 
-            if !isReady {
+            if !shouldRevealContent {
                 PhotoBlockLoadingView(
                     loadedCount: loadedPhotoIDs.count,
                     totalCount: photos.count
@@ -1084,9 +1091,16 @@ private struct PhotoRenderBlock: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: isReady)
+        .animation(.easeInOut(duration: 0.22), value: shouldRevealContent)
+        .task(id: photoIDs) {
+            didReachRevealTimeout = false
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            guard !Task.isCancelled else { return }
+            didReachRevealTimeout = true
+        }
         .onChange(of: photoIDs) { _, _ in
             loadedPhotoIDs = []
+            didReachRevealTimeout = false
         }
     }
 

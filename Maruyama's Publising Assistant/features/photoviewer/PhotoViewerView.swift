@@ -222,7 +222,7 @@ struct PhotoViewerView: View {
             } else if viewModel.isLoadingPositions {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Generando opciones de posición...")
+                    Text(positionLoadingText)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -243,6 +243,14 @@ struct PhotoViewerView: View {
         }
 
         return viewModel.distributors.first { $0.id == selectedDistributorId }?.name
+    }
+
+    private var positionLoadingText: String {
+        guard viewModel.totalPositionPreviewCount > 0 else {
+            return "Generando opciones de posición..."
+        }
+
+        return "Generando posiciones \(viewModel.loadedPositionPreviewCount) de \(viewModel.totalPositionPreviewCount)..."
     }
 
     private var imageCaptionOverlay: some View {

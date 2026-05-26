@@ -52,6 +52,7 @@ final class PreviewViewModel: ObservableObject {
     @Published var imageUrl: URL?
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
+    @Published var loadingMessage: String?
     @Published var successMessage: String?
     @Published var scheduledDate: Date?
     @Published var canRetryPublish: Bool = false
@@ -113,11 +114,15 @@ final class PreviewViewModel: ObservableObject {
         }
         
         isLoading = true
+        loadingMessage = "Guardando fusión..."
         errorMessage = nil
         successMessage = nil
         canRetryPublish = false
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            loadingMessage = nil
+        }
         
         do {
             let id = try await fusionRepository.saveFusion(
@@ -149,11 +154,15 @@ final class PreviewViewModel: ObservableObject {
         guard !isLoading else { return false }
         
         isLoading = true
+        loadingMessage = scheduledDate == nil ? "Publicando..." : "Programando publicación..."
         errorMessage = nil
         successMessage = nil
         canRetryPublish = false
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            loadingMessage = nil
+        }
         
         guard !caption.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "El caption no puede estar vacío"
