@@ -8,7 +8,7 @@
 protocol FusionRepository {
     func applyFusion(
         photoId: Int,
-        distributorId: Int,
+        logoId: Int,
         coordinate: Int,
         caption: String?
     ) async throws -> FusionResult

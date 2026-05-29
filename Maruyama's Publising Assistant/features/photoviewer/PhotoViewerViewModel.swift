@@ -15,14 +15,23 @@ struct LogoPositionOption: Identifiable {
     let preview: FusionResult
 }
 
+struct DistributorLogoOption: Identifiable, Hashable {
+    let id: Int
+    let distributorId: Int
+    let distributorName: String
+    let imageUrl: String
+    let displayName: String
+}
+
 @MainActor
 final class PhotoViewerViewModel: ObservableObject {
 
     let photo: Photo
     
     @Published var distributors: [Distributor] = []
+    @Published var logoOptions: [DistributorLogoOption] = []
     @Published var fusionImageBase64: String?
-    @Published var selectedDistributorId: Int?
+    @Published var selectedLogoId: Int?
     @Published var selectedCoordinate: Int?
     @Published var isLoading = false
     @Published var isLoadingPositions = false
@@ -53,6 +62,7 @@ final class PhotoViewerViewModel: ObservableObject {
         
         do {
             distributors = try await distributorRepository.fetchDistributors()
+            logoOptions = Self.makeLogoOptions(from: distributors)
         } catch {
             errorMessage = "No se pudieron cargar distribuidores"
         }
@@ -60,8 +70,8 @@ final class PhotoViewerViewModel: ObservableObject {
         isLoading = false
     }
 
-    func selectDistributor(_ distributorId: Int) async {
-        selectedDistributorId = distributorId
+    func selectLogo(_ logo: DistributorLogoOption) async {
+        selectedLogoId = logo.id
         selectedCoordinate = nil
         fusionImageBase64 = nil
         positionOptions = []
@@ -70,7 +80,7 @@ final class PhotoViewerViewModel: ObservableObject {
         totalPositionPreviewCount = 0
         errorMessage = nil
 
-        await loadPositionOptions(for: distributorId)
+        await loadPositionOptions(for: logo.id)
     }
 
     func selectPosition(_ option: LogoPositionOption) {
@@ -83,7 +93,7 @@ final class PhotoViewerViewModel: ObservableObject {
     }
     
     func applyFusion() async {
-        guard let distributor = selectedDistributorId,
+        guard let logoId = selectedLogoId,
               let coordinate = selectedCoordinate else { return }
         
         isLoading = true
@@ -92,7 +102,7 @@ final class PhotoViewerViewModel: ObservableObject {
         do {
             let result = try await fusionRepository.applyFusion(
                 photoId: photo.id,
-                distributorId: distributor,
+                logoId: logoId,
                 coordinate: coordinate,
                 caption: nil
             )
@@ -122,7 +132,7 @@ final class PhotoViewerViewModel: ObservableObject {
     
     func goToPreview() {
         guard fusionImageBase64 != nil,
-              selectedDistributorId != nil,
+              selectedLogoId != nil,
               selectedCoordinate != nil else {
             errorMessage = "Faltan datos para preview"
             return
@@ -131,7 +141,7 @@ final class PhotoViewerViewModel: ObservableObject {
         shouldNavigateToPreview = true
     }
 
-    private func loadPositionOptions(for distributorId: Int) async {
+    private func loadPositionOptions(for logoId: Int) async {
         let loadID = UUID()
         activePositionLoadID = loadID
         isLoadingPositions = true
@@ -149,7 +159,7 @@ final class PhotoViewerViewModel: ObservableObject {
                     do {
                         let result = try await fusionRepository.applyFusion(
                             photoId: photoId,
-                            distributorId: distributorId,
+                            logoId: logoId,
                             coordinate: coordinate,
                             caption: nil
                         )
@@ -188,7 +198,7 @@ final class PhotoViewerViewModel: ObservableObject {
             return loadedOptions.sorted { $0.id < $1.id }
         }
 
-        guard selectedDistributorId == distributorId,
+        guard selectedLogoId == logoId,
               activePositionLoadID == loadID else {
             return
         }
@@ -201,5 +211,23 @@ final class PhotoViewerViewModel: ObservableObject {
         }
 
         isLoadingPositions = false
+    }
+
+    private static func makeLogoOptions(from distributors: [Distributor]) -> [DistributorLogoOption] {
+        distributors.flatMap { distributor in
+            distributor.logos.enumerated().map { index, logo in
+                let displayName = distributor.logos.count > 1
+                    ? "\(distributor.name) \(index + 1)"
+                    : distributor.name
+
+                return DistributorLogoOption(
+                    id: logo.id,
+                    distributorId: distributor.id,
+                    distributorName: distributor.name,
+                    imageUrl: logo.imageUrl,
+                    displayName: displayName
+                )
+            }
+        }
     }
 }

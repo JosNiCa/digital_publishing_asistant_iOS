@@ -55,19 +55,19 @@ struct PhotoViewerView: View {
             .padding(.bottom, 28)
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
-                   let distributorId = viewModel.selectedDistributorId,
+                   let logoId = viewModel.selectedLogoId,
                    let coordinate = viewModel.selectedCoordinate {
                     
                     let sessionFusionId = FusionSession.shared.fusionId(
                         matchingPhotoId: viewModel.photo.id,
-                        distributorId: distributorId,
+                        logoId: logoId,
                         coordinate: coordinate
                     )
 
                     let input = PreviewInput(
                         imageBase64: imageBase64,
                         photoId: viewModel.photo.id,
-                        distributorId: distributorId,
+                        logoId: logoId,
                         coordinate: coordinate,
                         fusionId: sessionFusionId
                     )
@@ -139,13 +139,13 @@ struct PhotoViewerView: View {
         }
         .disabled(
             viewModel.fusionImageBase64 == nil ||
-            viewModel.selectedDistributorId == nil ||
+            viewModel.selectedLogoId == nil ||
             viewModel.selectedCoordinate == nil
         )
         .buttonStyle(
             PrimaryCapsuleButtonStyle(
                 isEnabled: viewModel.fusionImageBase64 != nil &&
-                    viewModel.selectedDistributorId != nil &&
+                    viewModel.selectedLogoId != nil &&
                     viewModel.selectedCoordinate != nil
             )
         )
@@ -178,8 +178,8 @@ struct PhotoViewerView: View {
 
                 Spacer()
 
-                if let selectedDistributorName {
-                    StatusBadge(text: selectedDistributorName, systemImage: "checkmark", tint: AppColors.positive)
+                if let selectedLogoName {
+                    StatusBadge(text: selectedLogoName, systemImage: "checkmark", tint: AppColors.positive)
                 }
             }
         
@@ -195,13 +195,13 @@ struct PhotoViewerView: View {
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 12)], spacing: 12) {
                     
-                    ForEach(viewModel.distributors) { distributor in
+                    ForEach(viewModel.logoOptions) { logo in
                         DistributorLogoTile(
-                            distributor: distributor,
-                            isSelected: viewModel.selectedDistributorId == distributor.id
+                            logo: logo,
+                            isSelected: viewModel.selectedLogoId == logo.id
                         ) {
                             Task {
-                                await viewModel.selectDistributor(distributor.id)
+                                await viewModel.selectLogo(logo)
                             }
                         }
                     }
@@ -217,8 +217,8 @@ struct PhotoViewerView: View {
 
             if let errorMessage = viewModel.errorMessage {
                 messageRow(errorMessage, systemImage: "exclamationmark.circle.fill", tint: AppColors.brand)
-            } else if viewModel.selectedDistributorId == nil {
-                messageRow("Selecciona un distribuidor para ver las posiciones disponibles.", systemImage: "hand.tap.fill", tint: AppColors.softInk)
+            } else if viewModel.selectedLogoId == nil {
+                messageRow("Selecciona un logo para ver las posiciones disponibles.", systemImage: "hand.tap.fill", tint: AppColors.softInk)
             } else if viewModel.isLoadingPositions {
                 HStack(spacing: 10) {
                     ProgressView()
@@ -237,12 +237,12 @@ struct PhotoViewerView: View {
         .appCard(cornerRadius: 22, padding: 16)
     }
 
-    private var selectedDistributorName: String? {
-        guard let selectedDistributorId = viewModel.selectedDistributorId else {
+    private var selectedLogoName: String? {
+        guard let selectedLogoId = viewModel.selectedLogoId else {
             return nil
         }
 
-        return viewModel.distributors.first { $0.id == selectedDistributorId }?.name
+        return viewModel.logoOptions.first { $0.id == selectedLogoId }?.displayName
     }
 
     private var positionLoadingText: String {
@@ -361,7 +361,7 @@ struct PhotoViewerView: View {
 }
 
 private struct DistributorLogoTile: View {
-    let distributor: Distributor
+    let logo: DistributorLogoOption
     let isSelected: Bool
     let action: () -> Void
 
@@ -373,7 +373,7 @@ private struct DistributorLogoTile: View {
                         .fill(isSelected ? AppColors.brand.opacity(0.10) : AppColors.field)
                         .frame(height: 70)
 
-                    RetryingRemoteImage(url: distributor.logoUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+                    RetryingRemoteImage(url: logo.imageUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
                         switch state {
                         case .loading:
                             ProgressView()
@@ -383,14 +383,14 @@ private struct DistributorLogoTile: View {
                                 .scaledToFit()
                                 .padding(12)
                         case .failure:
-                            Text(String(distributor.name.prefix(2)).uppercased())
+                            Text(String(logo.distributorName.prefix(2)).uppercased())
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(AppColors.brand)
                         }
                     }
                 }
 
-                Text(distributor.name)
+                Text(logo.displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.ink)
                     .lineLimit(1)

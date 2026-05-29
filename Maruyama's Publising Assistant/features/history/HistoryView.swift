@@ -140,7 +140,6 @@ private struct FusionDetailPreviewView: View {
             input = PreviewInput(
                 imageBase64: detail.imageBase64,
                 photoId: detail.photoId,
-                distributorId: detail.distributorId,
                 coordinate: detail.coordinate,
                 fusionId: item.id,
                 caption: detail.caption

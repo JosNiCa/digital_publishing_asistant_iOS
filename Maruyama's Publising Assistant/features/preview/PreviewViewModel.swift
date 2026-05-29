@@ -12,7 +12,7 @@ struct PreviewInput {
     let imageBase64: String?
     let imageUrl: String?
     let photoId: Int
-    let distributorId: Int?
+    let logoId: Int?
     let coordinate: Int
     let fusionId: Int? 
     let caption: String?
@@ -21,7 +21,7 @@ struct PreviewInput {
         imageBase64: String? = nil,
         imageUrl: String? = nil,
         photoId: Int,
-        distributorId: Int? = nil,
+        logoId: Int? = nil,
         coordinate: Int,
         fusionId: Int?,
         caption: String? = nil
@@ -29,7 +29,7 @@ struct PreviewInput {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
         self.photoId = photoId
-        self.distributorId = distributorId
+        self.logoId = logoId
         self.coordinate = coordinate
         self.fusionId = fusionId
         self.caption = caption
@@ -108,7 +108,7 @@ final class PreviewViewModel: ObservableObject {
             return true
         }
         
-        guard let distributorId = input.distributorId else {
+        guard let logoId = input.logoId else {
             errorMessage = "Faltan datos para guardar la fusión"
             return false
         }
@@ -127,7 +127,7 @@ final class PreviewViewModel: ObservableObject {
         do {
             let id = try await fusionRepository.saveFusion(
                 photoId: input.photoId,
-                logoId: distributorId,
+                logoId: logoId,
                 coordinate: input.coordinate,
                 caption: captionForRequest()
             )
@@ -136,7 +136,7 @@ final class PreviewViewModel: ObservableObject {
             
             FusionSession.shared.fusionId = id
             FusionSession.shared.photoId = input.photoId
-            FusionSession.shared.distributorId = input.distributorId
+            FusionSession.shared.logoId = input.logoId
             FusionSession.shared.coordinate = input.coordinate
             
             successMessage = "Fusión guardada (ID: \(id))"
@@ -172,20 +172,20 @@ final class PreviewViewModel: ObservableObject {
         do {
             // Asegurar que exista fusionId
             if fusionId == nil {
-                guard let distributorId = input.distributorId else {
+                guard let logoId = input.logoId else {
                     errorMessage = "Faltan datos para publicar la fusión"
                     return false
                 }
                 
                 let id = try await fusionRepository.saveFusion(
                     photoId: input.photoId,
-                    logoId: distributorId,
+                    logoId: logoId,
                     coordinate: input.coordinate,
                     caption: captionForRequest()
                 )
                 fusionId = id
                 FusionSession.shared.photoId = input.photoId
-                FusionSession.shared.distributorId = input.distributorId
+                FusionSession.shared.logoId = input.logoId
                 FusionSession.shared.coordinate = input.coordinate
                 FusionSession.shared.fusionId = id
             }
