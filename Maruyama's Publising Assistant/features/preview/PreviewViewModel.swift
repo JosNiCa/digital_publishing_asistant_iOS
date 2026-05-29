@@ -16,6 +16,7 @@ struct PreviewInput {
     let coordinate: Int
     let fusionId: Int? 
     let caption: String?
+    let platforms: [PublishingPlatform]
     
     init(
         imageBase64: String? = nil,
@@ -24,7 +25,8 @@ struct PreviewInput {
         logoId: Int? = nil,
         coordinate: Int,
         fusionId: Int?,
-        caption: String? = nil
+        caption: String? = nil,
+        platforms: [PublishingPlatform] = []
     ) {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
@@ -33,6 +35,7 @@ struct PreviewInput {
         self.coordinate = coordinate
         self.fusionId = fusionId
         self.caption = caption
+        self.platforms = platforms
     }
 }
 
@@ -56,6 +59,7 @@ final class PreviewViewModel: ObservableObject {
     @Published var successMessage: String?
     @Published var scheduledDate: Date?
     @Published var canRetryPublish: Bool = false
+    @Published var selectedPlatformKeys: Set<String>
 
     // MARK: - Internal State
     private(set) var fusionId: Int?
@@ -71,6 +75,7 @@ final class PreviewViewModel: ObservableObject {
         self.publishingRepository = publishingRepository
         self.fusionId = input.fusionId
         self.caption = input.caption ?? ""
+        self.selectedPlatformKeys = Set(input.platforms.map(\.key))
         
         self.decodeImage()
     }
@@ -209,12 +214,18 @@ final class PreviewViewModel: ObservableObject {
                 errorMessage = "No puedes programar en el pasado"
                 return false
             }
+
+            if platformsForRequest()?.isEmpty == true {
+                errorMessage = "Selecciona al menos una plataforma"
+                return false
+            }
             
             // Publicar
             try await publishingRepository.publishFusion(
                 fusionId: fusionId,
                 caption: caption,
-                scheduledTime: timestamp
+                scheduledTime: timestamp,
+                platforms: platformsForRequest()
             )
             
             if timestamp != nil {
@@ -247,12 +258,50 @@ final class PreviewViewModel: ObservableObject {
             return false
         }
 
+        if platformsForRequest()?.isEmpty == true {
+            errorMessage = "Selecciona al menos una plataforma"
+            return false
+        }
+
         return true
     }
 
     private func captionForRequest() -> String? {
         let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    var canChoosePlatforms: Bool {
+        input.platforms.count > 1
+    }
+
+    func togglePlatform(_ platform: PublishingPlatform) {
+        if selectedPlatformKeys.contains(platform.key) {
+            guard selectedPlatformKeys.count > 1 else {
+                errorMessage = "Selecciona al menos una plataforma"
+                return
+            }
+
+            selectedPlatformKeys.remove(platform.key)
+        } else {
+            selectedPlatformKeys.insert(platform.key)
+        }
+
+        errorMessage = nil
+    }
+
+    func isPlatformSelected(_ platform: PublishingPlatform) -> Bool {
+        selectedPlatformKeys.contains(platform.key)
+    }
+
+    private func platformsForRequest() -> [String]? {
+        guard canChoosePlatforms else {
+            return nil
+        }
+
+        return input.platforms
+            .map(\.key)
+            .filter { selectedPlatformKeys.contains($0) }
     }
 
     private func publishErrorMessage(from error: Error) -> String {

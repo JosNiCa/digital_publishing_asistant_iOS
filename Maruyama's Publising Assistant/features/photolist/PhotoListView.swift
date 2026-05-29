@@ -1279,7 +1279,7 @@ private struct PhotoCell: View {
                         Text(origin.capitalized)
                     }
 
-                    if let platformName = photo.platform?.name, !platformName.isEmpty {
+                    if let platformName = photo.platformDisplayName, !platformName.isEmpty {
                         Text(platformName)
                     }
                 }
@@ -1288,7 +1288,7 @@ private struct PhotoCell: View {
                 .lineLimit(1)
             }
             .padding(10)
-            .padding(.trailing, photo.platform?.iconUrl == nil ? 0 : 42)
+            .padding(.trailing, photo.primaryPlatform?.iconUrl == nil ? 0 : 42)
 
             platformIcon
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -1302,7 +1302,7 @@ private struct PhotoCell: View {
 
     @ViewBuilder
     private var platformIcon: some View {
-        if let platform = photo.platform,
+        if let platform = photo.primaryPlatform,
            let iconUrl = platform.iconUrl {
             RetryingRemoteImage(url: iconUrl, maxRetries: 1) { state, _ in
                 switch state {
@@ -1357,8 +1357,9 @@ private extension Photo {
             productName,
             origin,
             state,
-            platform?.key,
-            platform?.name,
+            primaryPlatform?.key,
+            displayPlatforms.map(\.key).joined(separator: " "),
+            platformDisplayName,
             formatDisplay,
             serverFormat,
             createdAt,

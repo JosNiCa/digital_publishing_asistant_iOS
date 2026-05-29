@@ -9,10 +9,12 @@ struct PublishRequestDTO: Encodable {
     let idFusion: Int
     let caption: String
     let scheduledTime: Int?
+    let platforms: [String]?
     
     enum CodingKeys: String, CodingKey {
         case idFusion = "id_fusion"
         case caption
         case scheduledTime = "scheduled_time"
+        case platforms
     }
 }

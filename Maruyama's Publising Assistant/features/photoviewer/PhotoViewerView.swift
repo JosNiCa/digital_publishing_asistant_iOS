@@ -69,7 +69,8 @@ struct PhotoViewerView: View {
                         photoId: viewModel.photo.id,
                         logoId: logoId,
                         coordinate: coordinate,
-                        fusionId: sessionFusionId
+                        fusionId: sessionFusionId,
+                        platforms: viewModel.photo.displayPlatforms
                     )
                     
                     PreviewView(
