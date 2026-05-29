@@ -18,4 +18,5 @@ struct FusionDetail {
     let distributorId: Int
     let coordinate: Int
     let caption: String?
+    let platforms: [PublishingPlatform]
 }

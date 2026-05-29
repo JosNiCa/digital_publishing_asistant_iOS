@@ -37,6 +37,8 @@ struct FusionItemDTO: Decodable {
     let thumbnailUrl: String
     let productoNombre: String
     let formato: String
+    let platform: PlatformDTO?
+    let platforms: [PlatformDTO]?
 }; extension FusionItemDTO {
     func toDomain() -> FusionItem {
         FusionItem(
@@ -48,7 +50,8 @@ struct FusionItemDTO: Decodable {
             fechaPublicacion: fechaPublicacion.flatMap(Self.parseDate),
             thumbnailUrl: thumbnailUrl,
             productoNombre: productoNombre,
-            formato: formato
+            formato: formato,
+            platforms: displayPlatforms
         )
     }
 
@@ -61,5 +64,15 @@ struct FusionItemDTO: Decodable {
 
         return formatter.date(from: value)
             ?? ISO8601DateFormatter().date(from: value)
+    }
+}
+
+private extension FusionItemDTO {
+    var displayPlatforms: [PublishingPlatform] {
+        if let platforms, !platforms.isEmpty {
+            return platforms.map { $0.toDomain() }
+        }
+
+        return platform.map { [$0.toDomain()] } ?? []
     }
 }

@@ -79,6 +79,9 @@ struct PreviewView: View {
         .navigationTitle("Preview")
         .navigationBarTitleDisplayMode(.inline)
         .appScreenBackground()
+        .task {
+            await viewModel.loadFusionDetailIfNeeded()
+        }
     }
 
     var header: some View {
@@ -107,7 +110,7 @@ private extension PreviewView {
                 SectionEyebrow("Plataformas", systemImage: "square.grid.2x2.fill")
 
                 HStack(spacing: 10) {
-                    ForEach(viewModel.input.platforms) { platform in
+                    ForEach(viewModel.platforms) { platform in
                         Button {
                             viewModel.togglePlatform(platform)
                         } label: {

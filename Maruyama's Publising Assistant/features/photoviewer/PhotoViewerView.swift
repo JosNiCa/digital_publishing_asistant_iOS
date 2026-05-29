@@ -122,11 +122,21 @@ struct PhotoViewerView: View {
 
                 Spacer()
 
-                StatusBadge(
-                    text: viewModel.photo.format.filterTitle,
-                    systemImage: "rectangle.3.group",
-                    tint: AppColors.brand
-                )
+                VStack(alignment: .trailing, spacing: 8) {
+                    StatusBadge(
+                        text: viewModel.photo.format.filterTitle,
+                        systemImage: "rectangle.3.group",
+                        tint: AppColors.brand
+                    )
+
+                    if let platformName = viewModel.photo.platformDisplayName {
+                        StatusBadge(
+                            text: platformName,
+                            systemImage: "paperplane.fill",
+                            tint: AppColors.softInk
+                        )
+                    }
+                }
             }
         }
         .appCard(cornerRadius: 22, padding: 16)

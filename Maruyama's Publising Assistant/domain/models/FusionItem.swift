@@ -17,4 +17,5 @@ struct FusionItem: Identifiable, Hashable {
     let thumbnailUrl: String
     let productoNombre: String
     let formato: String
+    let platforms: [PublishingPlatform]
 }

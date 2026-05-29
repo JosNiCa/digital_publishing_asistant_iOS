@@ -47,6 +47,7 @@ struct PlatformDTO: Decodable {
         case key
         case name
         case iconUrl
+        case iconUrlSnake = "icon_url"
     }
 
     init(from decoder: Decoder) throws {
@@ -62,6 +63,7 @@ struct PlatformDTO: Decodable {
         self.key = try container.decode(String.self, forKey: .key)
         self.name = try container.decode(String.self, forKey: .name)
         self.iconUrl = try container.decodeIfPresent(String.self, forKey: .iconUrl)
+            ?? container.decodeIfPresent(String.self, forKey: .iconUrlSnake)
     }
 }
 
