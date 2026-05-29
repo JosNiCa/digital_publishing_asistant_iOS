@@ -15,14 +15,23 @@ struct LogoPositionOption: Identifiable {
     let preview: FusionResult
 }
 
+struct DistributorLogoOption: Identifiable, Hashable {
+    let id: Int
+    let distributorId: Int
+    let distributorName: String
+    let imageUrl: String
+    let displayName: String
+}
+
 @MainActor
 final class PhotoViewerViewModel: ObservableObject {
 
     let photo: Photo
     
     @Published var distributors: [Distributor] = []
+    @Published var logoOptions: [DistributorLogoOption] = []
     @Published var fusionImageBase64: String?
-    @Published var selectedDistributorId: Int?
+    @Published var selectedLogoId: Int?
     @Published var selectedCoordinate: Int?
     @Published var isLoading = false
     @Published var isLoadingPositions = false
@@ -30,9 +39,12 @@ final class PhotoViewerViewModel: ObservableObject {
     @Published var shouldNavigateToPreview = false
     @Published var positionOptions: [LogoPositionOption] = []
     @Published var previewImageSize: CGSize?
+    @Published var loadedPositionPreviewCount = 0
+    @Published var totalPositionPreviewCount = 0
 
     private let distributorRepository: DistributorRepository
     private let fusionRepository: FusionRepository
+    private var activePositionLoadID = UUID()
     
 
     init(
@@ -50,6 +62,7 @@ final class PhotoViewerViewModel: ObservableObject {
         
         do {
             distributors = try await distributorRepository.fetchDistributors()
+            logoOptions = Self.makeLogoOptions(from: distributors)
         } catch {
             errorMessage = "No se pudieron cargar distribuidores"
         }
@@ -57,15 +70,17 @@ final class PhotoViewerViewModel: ObservableObject {
         isLoading = false
     }
 
-    func selectDistributor(_ distributorId: Int) async {
-        selectedDistributorId = distributorId
+    func selectLogo(_ logo: DistributorLogoOption) async {
+        selectedLogoId = logo.id
         selectedCoordinate = nil
         fusionImageBase64 = nil
         positionOptions = []
         previewImageSize = nil
+        loadedPositionPreviewCount = 0
+        totalPositionPreviewCount = 0
         errorMessage = nil
 
-        await loadPositionOptions(for: distributorId)
+        await loadPositionOptions(for: logo.id)
     }
 
     func selectPosition(_ option: LogoPositionOption) {
@@ -73,12 +88,12 @@ final class PhotoViewerViewModel: ObservableObject {
         fusionImageBase64 = option.preview.imageBase64
 
         if previewImageSize == nil {
-            previewImageSize = imageSize(fromBase64: option.preview.imageBase64)
+            previewImageSize = ImageDataDecoder.imageSize(fromBase64: option.preview.imageBase64)
         }
     }
     
     func applyFusion() async {
-        guard let distributor = selectedDistributorId,
+        guard let logoId = selectedLogoId,
               let coordinate = selectedCoordinate else { return }
         
         isLoading = true
@@ -87,7 +102,7 @@ final class PhotoViewerViewModel: ObservableObject {
         do {
             let result = try await fusionRepository.applyFusion(
                 photoId: photo.id,
-                distributorId: distributor,
+                logoId: logoId,
                 coordinate: coordinate,
                 caption: nil
             )
@@ -106,7 +121,7 @@ final class PhotoViewerViewModel: ObservableObject {
                     )
                 )
             }
-            previewImageSize = imageSize(fromBase64: result.imageBase64)
+            previewImageSize = ImageDataDecoder.imageSize(fromBase64: result.imageBase64)
             
         } catch {
             self.errorMessage = "Error al generar la imagen"
@@ -117,7 +132,7 @@ final class PhotoViewerViewModel: ObservableObject {
     
     func goToPreview() {
         guard fusionImageBase64 != nil,
-              selectedDistributorId != nil,
+              selectedLogoId != nil,
               selectedCoordinate != nil else {
             errorMessage = "Faltan datos para preview"
             return
@@ -126,49 +141,70 @@ final class PhotoViewerViewModel: ObservableObject {
         shouldNavigateToPreview = true
     }
 
-    private func loadPositionOptions(for distributorId: Int) async {
+    private func loadPositionOptions(for logoId: Int) async {
+        let loadID = UUID()
+        activePositionLoadID = loadID
         isLoadingPositions = true
-
-        var options: [LogoPositionOption] = []
-        var firstImageSize: CGSize?
 
         let availableCoordinates = photo.coordinates.map(\.id)
         let coordinateIds = availableCoordinates.isEmpty ? Array(1...3) : availableCoordinates
+        let photoId = photo.id
+        let fusionRepository = fusionRepository
+        totalPositionPreviewCount = coordinateIds.count
+        loadedPositionPreviewCount = 0
 
-        for coordinate in coordinateIds {
-            do {
-                let result = try await fusionRepository.applyFusion(
-                    photoId: photo.id,
-                    distributorId: distributorId,
-                    coordinate: coordinate,
-                    caption: nil
-                )
+        let options = await withTaskGroup(of: LogoPositionOption?.self) { group in
+            for coordinate in coordinateIds {
+                group.addTask {
+                    do {
+                        let result = try await fusionRepository.applyFusion(
+                            photoId: photoId,
+                            logoId: logoId,
+                            coordinate: coordinate,
+                            caption: nil
+                        )
 
-                guard let x = result.x,
-                      let y = result.y,
-                      let resultCoordinate = result.coordinate else {
-                    continue
+                        guard let x = result.x,
+                              let y = result.y,
+                              let resultCoordinate = result.coordinate else {
+                            return nil
+                        }
+
+                        return LogoPositionOption(
+                            id: resultCoordinate,
+                            x: x,
+                            y: y,
+                            preview: result
+                        )
+                    } catch {
+                        return nil
+                    }
                 }
-
-                if firstImageSize == nil {
-                    firstImageSize = imageSize(fromBase64: result.imageBase64)
-                }
-
-                options.append(
-                    LogoPositionOption(
-                        id: resultCoordinate,
-                        x: x,
-                        y: y,
-                        preview: result
-                    )
-                )
-            } catch {
-                continue
             }
+
+            var loadedOptions: [LogoPositionOption] = []
+            for await option in group {
+                guard activePositionLoadID == loadID else {
+                    return [LogoPositionOption]()
+                }
+
+                loadedPositionPreviewCount += 1
+
+                if let option {
+                    loadedOptions.append(option)
+                }
+            }
+
+            return loadedOptions.sorted { $0.id < $1.id }
         }
 
-        positionOptions = options.sorted { $0.id < $1.id }
-        previewImageSize = firstImageSize
+        guard selectedLogoId == logoId,
+              activePositionLoadID == loadID else {
+            return
+        }
+
+        positionOptions = options
+        previewImageSize = options.first.map { ImageDataDecoder.imageSize(fromBase64: $0.preview.imageBase64) } ?? nil
 
         if options.isEmpty {
             errorMessage = "Esta imagen no tiene posiciones disponibles para el logo seleccionado"
@@ -177,19 +213,21 @@ final class PhotoViewerViewModel: ObservableObject {
         isLoadingPositions = false
     }
 
-    private func imageSize(fromBase64 base64: String) -> CGSize? {
-        let cleanedBase64 = base64
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: "\r", with: "")
-            .replacingOccurrences(of: "data:image/png;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
+    private static func makeLogoOptions(from distributors: [Distributor]) -> [DistributorLogoOption] {
+        distributors.flatMap { distributor in
+            distributor.logos.enumerated().map { index, logo in
+                let displayName = distributor.logos.count > 1
+                    ? "\(distributor.name) \(index + 1)"
+                    : distributor.name
 
-        guard let data = Data(base64Encoded: cleanedBase64),
-              let image = UIImage(data: data) else {
-            return nil
+                return DistributorLogoOption(
+                    id: logo.id,
+                    distributorId: distributor.id,
+                    distributorName: distributor.name,
+                    imageUrl: logo.imageUrl,
+                    displayName: displayName
+                )
+            }
         }
-
-        return image.size
     }
 }

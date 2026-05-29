@@ -16,13 +16,15 @@ final class PublishingRepositoryImpl: PublishingRepository {
     func publishFusion(
         fusionId: Int,
         caption: String,
-        scheduledTime: Int?
+        scheduledTime: Int?,
+        platforms: [String]?
     ) async throws {
 
         let body = PublishRequestDTO(
             idFusion: fusionId,
             caption: caption,
-            scheduledTime: scheduledTime
+            scheduledTime: scheduledTime,
+            platforms: platforms
         )
 
         let response: PublishResponseDTO = try await apiClient.request(

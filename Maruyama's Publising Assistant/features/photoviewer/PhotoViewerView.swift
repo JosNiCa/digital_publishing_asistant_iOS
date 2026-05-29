@@ -55,21 +55,22 @@ struct PhotoViewerView: View {
             .padding(.bottom, 28)
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
-                   let distributorId = viewModel.selectedDistributorId,
+                   let logoId = viewModel.selectedLogoId,
                    let coordinate = viewModel.selectedCoordinate {
                     
                     let sessionFusionId = FusionSession.shared.fusionId(
                         matchingPhotoId: viewModel.photo.id,
-                        distributorId: distributorId,
+                        logoId: logoId,
                         coordinate: coordinate
                     )
 
                     let input = PreviewInput(
                         imageBase64: imageBase64,
                         photoId: viewModel.photo.id,
-                        distributorId: distributorId,
+                        logoId: logoId,
                         coordinate: coordinate,
-                        fusionId: sessionFusionId
+                        fusionId: sessionFusionId,
+                        platforms: viewModel.photo.displayPlatforms
                     )
                     
                     PreviewView(
@@ -139,13 +140,13 @@ struct PhotoViewerView: View {
         }
         .disabled(
             viewModel.fusionImageBase64 == nil ||
-            viewModel.selectedDistributorId == nil ||
+            viewModel.selectedLogoId == nil ||
             viewModel.selectedCoordinate == nil
         )
         .buttonStyle(
             PrimaryCapsuleButtonStyle(
                 isEnabled: viewModel.fusionImageBase64 != nil &&
-                    viewModel.selectedDistributorId != nil &&
+                    viewModel.selectedLogoId != nil &&
                     viewModel.selectedCoordinate != nil
             )
         )
@@ -154,7 +155,7 @@ struct PhotoViewerView: View {
     private var imageSection: some View {
         ZStack {
             if let base64 = viewModel.fusionImageBase64,
-               let uiImage = uiImage(fromBase64: base64) {
+               let uiImage = ImageDataDecoder.image(fromBase64: base64) {
                 logoPreviewImage(uiImage)
             } else {
                 remotePhotoImage
@@ -178,8 +179,8 @@ struct PhotoViewerView: View {
 
                 Spacer()
 
-                if let selectedDistributorName {
-                    StatusBadge(text: selectedDistributorName, systemImage: "checkmark", tint: AppColors.positive)
+                if let selectedLogoName {
+                    StatusBadge(text: selectedLogoName, systemImage: "checkmark", tint: AppColors.positive)
                 }
             }
         
@@ -195,13 +196,13 @@ struct PhotoViewerView: View {
             } else {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 12)], spacing: 12) {
                     
-                    ForEach(viewModel.distributors) { distributor in
+                    ForEach(viewModel.logoOptions) { logo in
                         DistributorLogoTile(
-                            distributor: distributor,
-                            isSelected: viewModel.selectedDistributorId == distributor.id
+                            logo: logo,
+                            isSelected: viewModel.selectedLogoId == logo.id
                         ) {
                             Task {
-                                await viewModel.selectDistributor(distributor.id)
+                                await viewModel.selectLogo(logo)
                             }
                         }
                     }
@@ -217,12 +218,12 @@ struct PhotoViewerView: View {
 
             if let errorMessage = viewModel.errorMessage {
                 messageRow(errorMessage, systemImage: "exclamationmark.circle.fill", tint: AppColors.brand)
-            } else if viewModel.selectedDistributorId == nil {
-                messageRow("Selecciona un distribuidor para ver las posiciones disponibles.", systemImage: "hand.tap.fill", tint: AppColors.softInk)
+            } else if viewModel.selectedLogoId == nil {
+                messageRow("Selecciona un logo para ver las posiciones disponibles.", systemImage: "hand.tap.fill", tint: AppColors.softInk)
             } else if viewModel.isLoadingPositions {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Generando opciones de posición...")
+                    Text(positionLoadingText)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -237,12 +238,20 @@ struct PhotoViewerView: View {
         .appCard(cornerRadius: 22, padding: 16)
     }
 
-    private var selectedDistributorName: String? {
-        guard let selectedDistributorId = viewModel.selectedDistributorId else {
+    private var selectedLogoName: String? {
+        guard let selectedLogoId = viewModel.selectedLogoId else {
             return nil
         }
 
-        return viewModel.distributors.first { $0.id == selectedDistributorId }?.name
+        return viewModel.logoOptions.first { $0.id == selectedLogoId }?.displayName
+    }
+
+    private var positionLoadingText: String {
+        guard viewModel.totalPositionPreviewCount > 0 else {
+            return "Generando opciones de posición..."
+        }
+
+        return "Generando posiciones \(viewModel.loadedPositionPreviewCount) de \(viewModel.totalPositionPreviewCount)..."
     }
 
     private var imageCaptionOverlay: some View {
@@ -274,16 +283,16 @@ struct PhotoViewerView: View {
     }
 
     private var remotePhotoImage: some View {
-        AsyncImage(url: URL(string: viewModel.photo.imageUrl)) { phase in
-            switch phase {
-            case .empty:
+        RetryingRemoteImage(url: viewModel.photo.imageUrl.resolvedMediaURL) { state, _ in
+            switch state {
+            case .loading:
                 ZStack {
                     AppColors.field
                     ProgressView()
                 }
                 .frame(maxWidth: .infinity, minHeight: 260)
             case .success(let image):
-                image
+                Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
             case .failure:
@@ -292,8 +301,6 @@ struct PhotoViewerView: View {
                     message: "No pudimos cargar el archivo original.",
                     systemImage: "photo.badge.exclamationmark"
                 )
-            default:
-                EmptyView()
             }
         }
     }
@@ -352,24 +359,10 @@ struct PhotoViewerView: View {
         return (CGFloat(y) / imageHeight) * viewHeight
     }
 
-    private func uiImage(fromBase64 base64: String) -> UIImage? {
-        let cleanedBase64 = base64
-            .replacingOccurrences(of: "\n", with: "")
-            .replacingOccurrences(of: "\r", with: "")
-            .replacingOccurrences(of: "data:image/png;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpeg;base64,", with: "")
-            .replacingOccurrences(of: "data:image/jpg;base64,", with: "")
-
-        guard let data = Data(base64Encoded: cleanedBase64) else {
-            return nil
-        }
-
-        return UIImage(data: data)
-    }
 }
 
 private struct DistributorLogoTile: View {
-    let distributor: Distributor
+    let logo: DistributorLogoOption
     let isSelected: Bool
     let action: () -> Void
 
@@ -381,26 +374,24 @@ private struct DistributorLogoTile: View {
                         .fill(isSelected ? AppColors.brand.opacity(0.10) : AppColors.field)
                         .frame(height: 70)
 
-                    AsyncImage(url: URL(string: distributor.logoUrl)) { phase in
-                        switch phase {
-                        case .empty:
+                    RetryingRemoteImage(url: logo.imageUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+                        switch state {
+                        case .loading:
                             ProgressView()
                         case .success(let image):
-                            image
+                            Image(uiImage: image)
                                 .resizable()
                                 .scaledToFit()
                                 .padding(12)
                         case .failure:
-                            Text(String(distributor.name.prefix(2)).uppercased())
+                            Text(String(logo.distributorName.prefix(2)).uppercased())
                                 .font(.headline.weight(.bold))
                                 .foregroundStyle(AppColors.brand)
-                        default:
-                            EmptyView()
                         }
                     }
                 }
 
-                Text(distributor.name)
+                Text(logo.displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppColors.ink)
                     .lineLimit(1)

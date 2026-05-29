@@ -9,7 +9,8 @@ protocol PublishingRepository {
     func publishFusion(
         fusionId: Int,
         caption: String,
-        scheduledTime: Int?
+        scheduledTime: Int?,
+        platforms: [String]?
     ) async throws
     
     func verifyConnection() async throws -> ConnectionStatus

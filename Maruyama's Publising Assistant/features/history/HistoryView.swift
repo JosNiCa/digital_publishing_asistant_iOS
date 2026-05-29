@@ -140,7 +140,6 @@ private struct FusionDetailPreviewView: View {
             input = PreviewInput(
                 imageBase64: detail.imageBase64,
                 photoId: detail.photoId,
-                distributorId: detail.distributorId,
                 coordinate: detail.coordinate,
                 fusionId: item.id,
                 caption: detail.caption
@@ -345,14 +344,19 @@ private struct FusionRow: View {
     
     var body: some View {
         HStack(spacing: 14) {
-            AsyncImage(url: URL(string: item.thumbnailUrl)) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                ZStack {
+            RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+                switch state {
+                case .loading:
+                    ZStack {
+                        AppColors.field
+                        ProgressView()
+                    }
+                case .success(let image):
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
                     AppColors.field
-                    ProgressView()
                 }
             }
             .frame(width: 72, height: 72)

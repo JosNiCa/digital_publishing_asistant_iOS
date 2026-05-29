@@ -68,6 +68,7 @@ struct PreviewView: View {
                 header
                 contentImage
                 captionInput
+                platformSection
                 scheduleSection
                 actionsSection
             }
@@ -99,6 +100,71 @@ struct PreviewView: View {
 
 private extension PreviewView {
 
+    @ViewBuilder
+    var platformSection: some View {
+        if viewModel.canChoosePlatforms {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionEyebrow("Plataformas", systemImage: "square.grid.2x2.fill")
+
+                HStack(spacing: 10) {
+                    ForEach(viewModel.input.platforms) { platform in
+                        Button {
+                            viewModel.togglePlatform(platform)
+                        } label: {
+                            HStack(spacing: 8) {
+                                platformIcon(platform)
+                                Text(platform.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                viewModel.isPlatformSelected(platform)
+                                    ? AppColors.brand.opacity(0.14)
+                                    : AppColors.field
+                            )
+                            .foregroundStyle(
+                                viewModel.isPlatformSelected(platform)
+                                    ? AppColors.brand
+                                    : AppColors.softInk
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .appCard(cornerRadius: 22, padding: 16)
+        }
+    }
+
+    @ViewBuilder
+    func platformIcon(_ platform: PublishingPlatform) -> some View {
+        if let iconUrl = platform.iconUrl {
+            RetryingRemoteImage(url: iconUrl, maxRetries: 1) { state, _ in
+                switch state {
+                case .loading:
+                    ProgressView()
+                        .controlSize(.mini)
+                        .frame(width: 20, height: 20)
+                case .success(let image):
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 20, height: 20)
+                case .failure:
+                    Image(systemName: "network")
+                        .frame(width: 20, height: 20)
+                }
+            }
+        } else {
+            Image(systemName: "network")
+                .frame(width: 20, height: 20)
+        }
+    }
+
     var contentImage: some View {
         Group {
             if let image = viewModel.image {
@@ -107,15 +173,15 @@ private extension PreviewView {
                     .scaledToFit()
                     .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else if let imageUrl = viewModel.imageUrl {
-                AsyncImage(url: imageUrl) { phase in
-                    switch phase {
-                    case .empty:
+                RetryingRemoteImage(url: imageUrl) { state, _ in
+                    switch state {
+                    case .loading:
                         ZStack {
                             AppColors.field
                             ProgressView("Cargando imagen...")
                         }
                     case .success(let image):
-                        image
+                        Image(uiImage: image)
                             .resizable()
                             .scaledToFit()
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -125,8 +191,6 @@ private extension PreviewView {
                             message: "No pudimos cargar la previsualización de esta fusión.",
                             systemImage: "photo.badge.exclamationmark"
                         )
-                    @unknown default:
-                        EmptyView()
                     }
                 }
             } else {
@@ -198,7 +262,7 @@ private extension PreviewView {
             if viewModel.isLoading {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Procesando publicación...")
+                    Text(viewModel.loadingMessage ?? "Procesando...")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -224,6 +288,7 @@ private extension PreviewView {
                     Label("Guardar", systemImage: "tray.and.arrow.down.fill")
                 }
                 .buttonStyle(SecondaryCapsuleButtonStyle())
+                .disabled(viewModel.isLoading)
 
                 Button {
                     publishInBackground()

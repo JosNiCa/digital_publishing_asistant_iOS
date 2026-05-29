@@ -8,15 +8,44 @@
 struct DistributorDTO: Decodable {
     let id: Int
     let name: String
-    let logoUrl: String
+    let logoId: Int?
+    let logoUrl: String?
+    let logos: [DistributorLogoDTO]?
+}
+
+struct DistributorLogoDTO: Decodable {
+    let id: Int
+    let imageUrl: String
 }
 
 extension DistributorDTO {
     func toDomain() -> Distributor {
-        Distributor(
+        let domainLogos = (logos ?? []).map {
+            DistributorLogo(
+                id: $0.id,
+                imageUrl: $0.imageUrl
+            )
+        }
+
+        let compatibleLogos: [DistributorLogo]
+        if domainLogos.isEmpty,
+           let logoUrl {
+            compatibleLogos = [
+                DistributorLogo(
+                    id: logoId ?? id,
+                    imageUrl: logoUrl
+                )
+            ]
+        } else {
+            compatibleLogos = domainLogos
+        }
+
+        return Distributor(
             id: id,
             name: name,
-            logoUrl: logoUrl
+            logoId: logoId,
+            logoUrl: logoUrl,
+            logos: compatibleLogos
         )
     }
 }

@@ -14,6 +14,7 @@ struct Photo: Identifiable, Hashable {
     let height: Int?
     let serverFormat: String?
     let platform: PublishingPlatform?
+    let platforms: [PublishingPlatform]
     let origin: String?
     let createdAt: String?
     let isInUse: Bool?
@@ -29,6 +30,7 @@ struct Photo: Identifiable, Hashable {
         height: Int? = nil,
         serverFormat: String? = nil,
         platform: PublishingPlatform? = nil,
+        platforms: [PublishingPlatform] = [],
         origin: String? = nil,
         createdAt: String? = nil,
         isInUse: Bool? = nil,
@@ -43,6 +45,7 @@ struct Photo: Identifiable, Hashable {
         self.height = height
         self.serverFormat = serverFormat
         self.platform = platform
+        self.platforms = platforms
         self.origin = origin
         self.createdAt = createdAt
         self.isInUse = isInUse
@@ -166,8 +169,8 @@ extension Photo {
             return true
         }
 
-        if let destinationPlatform {
-            return destinationPlatform == platform
+        if !destinationPlatforms.isEmpty {
+            return destinationPlatforms.contains(platform)
         }
 
         switch platform {
@@ -181,7 +184,7 @@ extension Photo {
     }
 
     var destinationPlatform: PublishingPlatformFilter? {
-        guard let platform = platform?.key.lowercased() else {
+        guard let platform = primaryPlatform?.key.lowercased() else {
             return nil
         }
 
@@ -193,6 +196,40 @@ extension Photo {
         default:
             return nil
         }
+    }
+
+    var destinationPlatforms: Set<PublishingPlatformFilter> {
+        let filters = platforms.compactMap {
+            PublishingPlatformFilter(platformKey: $0.key)
+        }
+
+        if !filters.isEmpty {
+            return Set(filters)
+        }
+
+        if let destinationPlatform {
+            return [destinationPlatform]
+        }
+
+        return []
+    }
+
+    var primaryPlatform: PublishingPlatform? {
+        platform ?? platforms.first
+    }
+
+    var platformDisplayName: String? {
+        let names = displayPlatforms.map(\.name).filter { !$0.isEmpty }
+        guard !names.isEmpty else { return nil }
+        return names.joined(separator: " / ")
+    }
+
+    var displayPlatforms: [PublishingPlatform] {
+        if !platforms.isEmpty {
+            return platforms
+        }
+
+        return platform.map { [$0] } ?? []
     }
 
     var createdDate: Date? {
@@ -244,4 +281,17 @@ extension Photo {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+}
+
+extension PublishingPlatformFilter {
+    init?(platformKey: String) {
+        switch platformKey.lowercased() {
+        case "instagram":
+            self = .instagram
+        case "facebook":
+            self = .facebook
+        default:
+            return nil
+        }
+    }
 }

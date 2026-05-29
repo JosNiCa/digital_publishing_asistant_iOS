@@ -14,16 +14,16 @@ final class FusionSession: ObservableObject {
 
     @Published var fusionId: Int?
     @Published var photoId: Int?
-    @Published var distributorId: Int?
+    @Published var logoId: Int?
     @Published var coordinate: Int?
 
     func fusionId(
         matchingPhotoId photoId: Int,
-        distributorId: Int,
+        logoId: Int,
         coordinate: Int
     ) -> Int? {
         guard self.photoId == photoId,
-              self.distributorId == distributorId,
+              self.logoId == logoId,
               self.coordinate == coordinate else {
             return nil
         }
@@ -34,7 +34,7 @@ final class FusionSession: ObservableObject {
     func clear() {
         fusionId = nil
         photoId = nil
-        distributorId = nil
+        logoId = nil
         coordinate = nil
     }
 }

@@ -9,5 +9,12 @@
 struct Distributor: Identifiable {
     let id: Int
     let name: String
-    let logoUrl: String
+    let logoId: Int?
+    let logoUrl: String?
+    let logos: [DistributorLogo]
+}
+
+struct DistributorLogo: Identifiable, Hashable {
+    let id: Int
+    let imageUrl: String
 }

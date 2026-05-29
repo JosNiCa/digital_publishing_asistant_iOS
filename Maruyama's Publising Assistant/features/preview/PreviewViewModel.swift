@@ -12,27 +12,30 @@ struct PreviewInput {
     let imageBase64: String?
     let imageUrl: String?
     let photoId: Int
-    let distributorId: Int?
+    let logoId: Int?
     let coordinate: Int
     let fusionId: Int? 
     let caption: String?
+    let platforms: [PublishingPlatform]
     
     init(
         imageBase64: String? = nil,
         imageUrl: String? = nil,
         photoId: Int,
-        distributorId: Int? = nil,
+        logoId: Int? = nil,
         coordinate: Int,
         fusionId: Int?,
-        caption: String? = nil
+        caption: String? = nil,
+        platforms: [PublishingPlatform] = []
     ) {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
         self.photoId = photoId
-        self.distributorId = distributorId
+        self.logoId = logoId
         self.coordinate = coordinate
         self.fusionId = fusionId
         self.caption = caption
+        self.platforms = platforms
     }
 }
 
@@ -52,9 +55,11 @@ final class PreviewViewModel: ObservableObject {
     @Published var imageUrl: URL?
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
+    @Published var loadingMessage: String?
     @Published var successMessage: String?
     @Published var scheduledDate: Date?
     @Published var canRetryPublish: Bool = false
+    @Published var selectedPlatformKeys: Set<String>
 
     // MARK: - Internal State
     private(set) var fusionId: Int?
@@ -70,6 +75,7 @@ final class PreviewViewModel: ObservableObject {
         self.publishingRepository = publishingRepository
         self.fusionId = input.fusionId
         self.caption = input.caption ?? ""
+        self.selectedPlatformKeys = Set(input.platforms.map(\.key))
         
         self.decodeImage()
     }
@@ -82,11 +88,7 @@ final class PreviewViewModel: ObservableObject {
             return
         }
         
-        let cleanedBase64 = imageBase64
-            .replacingOccurrences(of: "\n", with: "")
-        
-        guard let data = Data(base64Encoded: cleanedBase64),
-              let uiImage = UIImage(data: data) else {
+        guard let uiImage = ImageDataDecoder.image(fromBase64: imageBase64) else {
             self.errorMessage = "Error al procesar la imagen"
             return
         }
@@ -111,22 +113,26 @@ final class PreviewViewModel: ObservableObject {
             return true
         }
         
-        guard let distributorId = input.distributorId else {
+        guard let logoId = input.logoId else {
             errorMessage = "Faltan datos para guardar la fusión"
             return false
         }
         
         isLoading = true
+        loadingMessage = "Guardando fusión..."
         errorMessage = nil
         successMessage = nil
         canRetryPublish = false
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            loadingMessage = nil
+        }
         
         do {
             let id = try await fusionRepository.saveFusion(
                 photoId: input.photoId,
-                logoId: distributorId,
+                logoId: logoId,
                 coordinate: input.coordinate,
                 caption: captionForRequest()
             )
@@ -135,7 +141,7 @@ final class PreviewViewModel: ObservableObject {
             
             FusionSession.shared.fusionId = id
             FusionSession.shared.photoId = input.photoId
-            FusionSession.shared.distributorId = input.distributorId
+            FusionSession.shared.logoId = input.logoId
             FusionSession.shared.coordinate = input.coordinate
             
             successMessage = "Fusión guardada (ID: \(id))"
@@ -153,11 +159,15 @@ final class PreviewViewModel: ObservableObject {
         guard !isLoading else { return false }
         
         isLoading = true
+        loadingMessage = scheduledDate == nil ? "Publicando..." : "Programando publicación..."
         errorMessage = nil
         successMessage = nil
         canRetryPublish = false
         
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            loadingMessage = nil
+        }
         
         guard !caption.trimmingCharacters(in: .whitespaces).isEmpty else {
             errorMessage = "El caption no puede estar vacío"
@@ -167,20 +177,20 @@ final class PreviewViewModel: ObservableObject {
         do {
             // Asegurar que exista fusionId
             if fusionId == nil {
-                guard let distributorId = input.distributorId else {
+                guard let logoId = input.logoId else {
                     errorMessage = "Faltan datos para publicar la fusión"
                     return false
                 }
                 
                 let id = try await fusionRepository.saveFusion(
                     photoId: input.photoId,
-                    logoId: distributorId,
+                    logoId: logoId,
                     coordinate: input.coordinate,
                     caption: captionForRequest()
                 )
                 fusionId = id
                 FusionSession.shared.photoId = input.photoId
-                FusionSession.shared.distributorId = input.distributorId
+                FusionSession.shared.logoId = input.logoId
                 FusionSession.shared.coordinate = input.coordinate
                 FusionSession.shared.fusionId = id
             }
@@ -204,12 +214,18 @@ final class PreviewViewModel: ObservableObject {
                 errorMessage = "No puedes programar en el pasado"
                 return false
             }
+
+            if platformsForRequest()?.isEmpty == true {
+                errorMessage = "Selecciona al menos una plataforma"
+                return false
+            }
             
             // Publicar
             try await publishingRepository.publishFusion(
                 fusionId: fusionId,
                 caption: caption,
-                scheduledTime: timestamp
+                scheduledTime: timestamp,
+                platforms: platformsForRequest()
             )
             
             if timestamp != nil {
@@ -242,12 +258,50 @@ final class PreviewViewModel: ObservableObject {
             return false
         }
 
+        if platformsForRequest()?.isEmpty == true {
+            errorMessage = "Selecciona al menos una plataforma"
+            return false
+        }
+
         return true
     }
 
     private func captionForRequest() -> String? {
         let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    var canChoosePlatforms: Bool {
+        input.platforms.count > 1
+    }
+
+    func togglePlatform(_ platform: PublishingPlatform) {
+        if selectedPlatformKeys.contains(platform.key) {
+            guard selectedPlatformKeys.count > 1 else {
+                errorMessage = "Selecciona al menos una plataforma"
+                return
+            }
+
+            selectedPlatformKeys.remove(platform.key)
+        } else {
+            selectedPlatformKeys.insert(platform.key)
+        }
+
+        errorMessage = nil
+    }
+
+    func isPlatformSelected(_ platform: PublishingPlatform) -> Bool {
+        selectedPlatformKeys.contains(platform.key)
+    }
+
+    private func platformsForRequest() -> [String]? {
+        guard canChoosePlatforms else {
+            return nil
+        }
+
+        return input.platforms
+            .map(\.key)
+            .filter { selectedPlatformKeys.contains($0) }
     }
 
     private func publishErrorMessage(from error: Error) -> String {

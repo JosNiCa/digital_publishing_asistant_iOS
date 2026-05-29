@@ -154,26 +154,28 @@ struct PhotoListView: View {
     ]
     
     private var gridView: some View {
-        ScrollView {
+        let visiblePhotos = filteredPhotos
+
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                gallerySummary
+                gallerySummary(visibleCount: visiblePhotos.count)
 
                 if isShowingSearch {
                     searchPanel
                 }
 
-                filterHeader
+                filterHeader(visibleCount: visiblePhotos.count)
 
                 if isShowingFilters {
                     filterPanel
                 }
 
-                if filteredPhotos.isEmpty {
+                if visiblePhotos.isEmpty {
                     emptyFilteredView
                 }
 
                 ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
-                    let photos = photos(for: format)
+                    let photos = photos(for: format, in: visiblePhotos)
 
                     if !photos.isEmpty {
                         PhotoFormatSection(
@@ -269,8 +271,8 @@ struct PhotoListView: View {
         }
     }
 
-    private func photos(for format: PhotoFormat) -> [Photo] {
-        filteredPhotos.filter { $0.format == format }
+    private func photos(for format: PhotoFormat, in photos: [Photo]) -> [Photo] {
+        photos.filter { $0.format == format }
     }
 
     private func selectPhoto(_ photo: Photo) {
@@ -278,7 +280,7 @@ struct PhotoListView: View {
         selectedPhoto = photo
     }
 
-    private var filterHeader: some View {
+    private func filterHeader(visibleCount: Int) -> some View {
         HStack(spacing: 12) {
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -308,7 +310,7 @@ struct PhotoListView: View {
 
             Spacer()
 
-            Text("\(filteredPhotos.count) fotos")
+            Text("\(visibleCount) fotos")
                 .font(.caption.weight(.semibold))
                 .foregroundColor(.secondary)
         }
@@ -407,7 +409,7 @@ struct PhotoListView: View {
         }
     }
 
-    private var gallerySummary: some View {
+    private func gallerySummary(visibleCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 7) {
@@ -435,7 +437,7 @@ struct PhotoListView: View {
                 StatusBadge(text: "\(viewModel.photos.count) totales", systemImage: "photo.on.rectangle", tint: AppColors.softInk)
 
                 if activeFilterCount > 0 {
-                    StatusBadge(text: "\(filteredPhotos.count) visibles", systemImage: "eye.fill", tint: AppColors.brand)
+                    StatusBadge(text: "\(visibleCount) visibles", systemImage: "eye.fill", tint: AppColors.brand)
                 }
 
                 if !submittedSearchText.isEmpty {
@@ -1061,9 +1063,14 @@ private struct PhotoRenderBlock: View {
     let onSelect: (Photo) -> Void
 
     @State private var loadedPhotoIDs: Set<Int> = []
+    @State private var didReachRevealTimeout = false
 
     private var isReady: Bool {
         loadedPhotoIDs.count >= photos.count
+    }
+
+    private var shouldRevealContent: Bool {
+        isReady || didReachRevealTimeout
     }
 
     private var photoIDs: [Int] {
@@ -1073,10 +1080,10 @@ private struct PhotoRenderBlock: View {
     var body: some View {
         ZStack(alignment: .top) {
             blockContent
-                .opacity(isReady ? 1 : 0)
-                .allowsHitTesting(isReady)
+                .opacity(shouldRevealContent ? 1 : 0)
+                .allowsHitTesting(shouldRevealContent)
 
-            if !isReady {
+            if !shouldRevealContent {
                 PhotoBlockLoadingView(
                     loadedCount: loadedPhotoIDs.count,
                     totalCount: photos.count
@@ -1084,9 +1091,16 @@ private struct PhotoRenderBlock: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: isReady)
+        .animation(.easeInOut(duration: 0.22), value: shouldRevealContent)
+        .task(id: photoIDs) {
+            didReachRevealTimeout = false
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            guard !Task.isCancelled else { return }
+            didReachRevealTimeout = true
+        }
         .onChange(of: photoIDs) { _, _ in
             loadedPhotoIDs = []
+            didReachRevealTimeout = false
         }
     }
 
@@ -1202,58 +1216,48 @@ private struct PhotoCell: View {
     let aspectRatio: Double
     let onRenderComplete: (Photo) -> Void
     @State private var didCompleteRender = false
-    @State private var imageRetryID = 0
 
     private let maxImageRetries = 3
     
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            AsyncImage(url: resolvedImageURL) { phase in
-                switch phase {
-                case .empty:
+            RetryingRemoteImage(
+                url: resolvedImageURL,
+                maxRetries: maxImageRetries,
+                onSuccess: completeRenderIfNeeded,
+                onFinalFailure: completeRenderIfNeeded
+            ) { state, retry in
+                switch state {
+                case .loading:
                     ZStack {
                         AppColors.field
                         ProgressView()
                     }
                 case .success(let image):
-                    image
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
-                        .onAppear {
-                            completeRenderIfNeeded()
-                        }
                 case .failure:
                     ZStack {
                         AppColors.field
-                        if imageRetryID < maxImageRetries {
-                            ProgressView()
-                        } else {
-                            Button {
-                                didCompleteRender = false
-                                imageRetryID = 0
-                            } label: {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundColor(.secondary)
-                                    .frame(width: 44, height: 44)
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(Circle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Reintentar imagen")
+                        Button {
+                            didCompleteRender = false
+                            retry()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.title2.weight(.semibold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 44, height: 44)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Circle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reintentar imagen")
                     }
-                    .onAppear {
-                        retryImageOrComplete()
-                    }
-                @unknown default:
-                    EmptyView()
                 }
             }
-            .id("\(photo.id)-\(imageRetryID)-\(resolvedImageURL?.absoluteString ?? photo.imageUrl)")
             .onChange(of: photo.id) { _, _ in
                 didCompleteRender = false
-                imageRetryID = 0
             }
 
             LinearGradient(
@@ -1275,7 +1279,7 @@ private struct PhotoCell: View {
                         Text(origin.capitalized)
                     }
 
-                    if let platformName = photo.platform?.name, !platformName.isEmpty {
+                    if let platformName = photo.platformDisplayName, !platformName.isEmpty {
                         Text(platformName)
                     }
                 }
@@ -1284,7 +1288,7 @@ private struct PhotoCell: View {
                 .lineLimit(1)
             }
             .padding(10)
-            .padding(.trailing, photo.platform?.iconUrl == nil ? 0 : 42)
+            .padding(.trailing, photo.primaryPlatform?.iconUrl == nil ? 0 : 42)
 
             platformIcon
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -1298,11 +1302,11 @@ private struct PhotoCell: View {
 
     @ViewBuilder
     private var platformIcon: some View {
-        if let platform = photo.platform,
+        if let platform = photo.primaryPlatform,
            let iconUrl = platform.iconUrl {
-            AsyncImage(url: iconUrl) { phase in
-                switch phase {
-                case .empty:
+            RetryingRemoteImage(url: iconUrl, maxRetries: 1) { state, _ in
+                switch state {
+                case .loading:
                     ProgressView()
                         .controlSize(.mini)
                         .frame(width: 24, height: 24)
@@ -1310,7 +1314,7 @@ private struct PhotoCell: View {
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 case .success(let image):
-                    image
+                    Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
@@ -1318,8 +1322,6 @@ private struct PhotoCell: View {
                         .background(.ultraThinMaterial)
                         .clipShape(Circle())
                 case .failure:
-                    EmptyView()
-                @unknown default:
                     EmptyView()
                 }
             }
@@ -1332,22 +1334,6 @@ private struct PhotoCell: View {
         guard !didCompleteRender else { return }
         didCompleteRender = true
         onRenderComplete(photo)
-    }
-
-    private func retryImageOrComplete() {
-        guard imageRetryID < maxImageRetries else {
-            completeRenderIfNeeded()
-            return
-        }
-
-        let nextRetryID = imageRetryID + 1
-        Task {
-            try? await Task.sleep(nanoseconds: UInt64(nextRetryID) * 450_000_000)
-            await MainActor.run {
-                guard imageRetryID < nextRetryID else { return }
-                imageRetryID = nextRetryID
-            }
-        }
     }
 
     private var resolvedImageURL: URL? {
@@ -1371,8 +1357,9 @@ private extension Photo {
             productName,
             origin,
             state,
-            platform?.key,
-            platform?.name,
+            primaryPlatform?.key,
+            displayPlatforms.map(\.key).joined(separator: " "),
+            platformDisplayName,
             formatDisplay,
             serverFormat,
             createdAt,
@@ -1406,25 +1393,5 @@ private extension String {
         folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-    }
-
-    var resolvedMediaURL: URL? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        if let url = URL(string: trimmed), url.scheme != nil {
-            return url
-        }
-
-        let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed) ?? trimmed
-        if let url = URL(string: encoded), url.scheme != nil {
-            return url
-        }
-
-        if trimmed.hasPrefix("/") {
-            return URL(string: trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
-        }
-
-        return URL(string: "/" + trimmed, relativeTo: URL(string: "https://ljdit.com"))?.absoluteURL
     }
 }
