@@ -15,14 +15,17 @@ final class MediaRepositoryImpl: MediaRepository {
     func fetchPhotos() async throws -> [Photo] {
         var page = 1
         var photos: [Photo] = []
-        let isAdmin = await MainActor.run {
-            SessionManager.shared.isAdmin
+        let session = await MainActor.run {
+            (
+                isLoggedIn: SessionManager.shared.isLoggedIn,
+                isAdmin: SessionManager.shared.isAdmin
+            )
         }
 
         while true {
             let response: PhotosResponseDTO = try await apiClient.request(
-                endpoint: .getPhotos(page: page, pageSize: 100, includeAllStates: isAdmin),
-                requiresAuth: isAdmin
+                endpoint: .getPhotos(page: page, pageSize: 100, includeAllStates: session.isAdmin),
+                requiresAuth: session.isLoggedIn
             )
 
             photos.append(contentsOf: response.results.map { $0.toDomain() })
