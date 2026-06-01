@@ -107,16 +107,10 @@ private extension HistoryView {
 
 private extension FusionItem {
     var previewInput: PreviewInput {
-        let cachedSelection = FusionPlatformCache.selection(for: id)
-        let previewPlatforms = platforms.isEmpty
-            ? cachedSelection?.platforms ?? []
-            : platforms
-
-        return PreviewInput(
+        PreviewInput(
             fusionId: id,
             caption: caption,
-            platforms: previewPlatforms,
-            selectedPlatformKeys: cachedSelection?.selectedKeys
+            platforms: platforms
         )
     }
 }

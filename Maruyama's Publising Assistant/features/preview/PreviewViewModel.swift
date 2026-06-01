@@ -17,7 +17,6 @@ struct PreviewInput {
     let fusionId: Int? 
     let caption: String?
     let platforms: [PublishingPlatform]
-    let selectedPlatformKeys: Set<String>?
     
     init(
         imageBase64: String? = nil,
@@ -27,8 +26,7 @@ struct PreviewInput {
         coordinate: Int? = nil,
         fusionId: Int?,
         caption: String? = nil,
-        platforms: [PublishingPlatform] = [],
-        selectedPlatformKeys: Set<String>? = nil
+        platforms: [PublishingPlatform] = []
     ) {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
@@ -38,7 +36,6 @@ struct PreviewInput {
         self.fusionId = fusionId
         self.caption = caption
         self.platforms = platforms
-        self.selectedPlatformKeys = selectedPlatformKeys
     }
 }
 
@@ -87,7 +84,7 @@ final class PreviewViewModel: ObservableObject {
         self.coordinate = input.coordinate
         self.caption = input.caption ?? ""
         self.platforms = input.platforms
-        self.selectedPlatformKeys = input.selectedPlatformKeys ?? Set(input.platforms.map(\.key))
+        self.selectedPlatformKeys = Set(input.platforms.map(\.key))
         
         self.decodeImage()
     }
@@ -142,11 +139,6 @@ final class PreviewViewModel: ObservableObject {
             if !detail.platforms.isEmpty {
                 platforms = detail.platforms
                 selectedPlatformKeys = Set(detail.platforms.map(\.key))
-            } else if let selection = FusionPlatformCache.selection(for: fusionId) {
-                platforms = selection.platforms
-                selectedPlatformKeys = selection.selectedKeys.isEmpty
-                    ? Set(selection.platforms.map(\.key))
-                    : selection.selectedKeys
             }
 
             guard let uiImage = ImageDataDecoder.image(fromBase64: detail.imageBase64) else {
@@ -164,12 +156,7 @@ final class PreviewViewModel: ObservableObject {
         
         guard !isLoading else { return false }
         
-        if let fusionId {
-            FusionPlatformCache.save(
-                platforms: platforms,
-                selectedKeys: selectedPlatformKeys,
-                for: fusionId
-            )
+        if fusionId != nil {
             successMessage = "La fusión ya fue guardada"
             FusionSession.shared.clear()
             return true
@@ -200,11 +187,6 @@ final class PreviewViewModel: ObservableObject {
             )
             
             self.fusionId = id
-            FusionPlatformCache.save(
-                platforms: platforms,
-                selectedKeys: selectedPlatformKeys,
-                for: id
-            )
             
             FusionSession.shared.fusionId = id
             FusionSession.shared.photoId = photoId
@@ -256,11 +238,6 @@ final class PreviewViewModel: ObservableObject {
                     caption: captionForRequest()
                 )
                 fusionId = id
-                FusionPlatformCache.save(
-                    platforms: platforms,
-                    selectedKeys: selectedPlatformKeys,
-                    for: id
-                )
                 FusionSession.shared.photoId = photoId
                 FusionSession.shared.logoId = logoId
                 FusionSession.shared.coordinate = coordinate
