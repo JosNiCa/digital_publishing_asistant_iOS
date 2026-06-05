@@ -12,6 +12,8 @@ protocol PublishingRepository {
         scheduledTime: Int?,
         platforms: [String]?
     ) async throws
+
+    func deletePublishedPost(fusionId: Int) async throws
     
     func verifyConnection() async throws -> ConnectionStatus
 

@@ -23,7 +23,8 @@ final public class APIClient {
     func request<T: Decodable>(
         endpoint: Endpoint,
         body: Encodable? = nil,
-        requiresAuth: Bool = false
+        requiresAuth: Bool = false,
+        sendsAuthIfAvailable: Bool = false
     ) async throws -> T {
         
         guard let url = URL(string: endpoint.path, relativeTo: baseURL) else {
@@ -41,8 +42,12 @@ final public class APIClient {
                 tokenType: SessionManager.shared.tokenType ?? "Bearer"
             )
         }
-        if requiresAuth {
+        if requiresAuth || sendsAuthIfAvailable {
             guard let token = auth.token, !token.isEmpty else {
+                if sendsAuthIfAvailable {
+                    return try await requestWithoutAuth(request, body: body)
+                }
+
                 throw APIError.missingToken
             }
             request.addValue("\(auth.tokenType) \(token)", forHTTPHeaderField: "Authorization")
@@ -65,6 +70,13 @@ final public class APIClient {
             }
 
             guard (200..<300).contains(httpResponse.statusCode) else {
+                if httpResponse.statusCode == 401, sendsAuthIfAvailable, !requiresAuth {
+                    await MainActor.run {
+                        SessionManager.shared.handleUnauthorized()
+                    }
+                    return try await requestWithoutAuth(request, body: body)
+                }
+
                 if httpResponse.statusCode == 401, requiresAuth {
                     if requiresAuth, auth.token != nil {
                         await MainActor.run {
@@ -85,6 +97,46 @@ final public class APIClient {
                 throw APIError.decodingError(error)
             }
 
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.networkError(error)
+        }
+    }
+
+    private func requestWithoutAuth<T: Decodable>(
+        _ request: URLRequest,
+        body: Encodable?
+    ) async throws -> T {
+        var request = request
+        request.setValue(nil, forHTTPHeaderField: "Authorization")
+
+        if let body {
+            do {
+                request.httpBody = try JSONEncoder().encode(body)
+            } catch {
+                throw APIError.networkError(error)
+            }
+        }
+
+        do {
+            let (data, response) = try await session.data(for: request)
+
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.unknown
+            }
+
+            guard (200..<300).contains(httpResponse.statusCode) else {
+                throw Self.apiError(from: data)
+            }
+
+            do {
+                return try JSONDecoder.apiDecoder.decode(T.self, from: data)
+            } catch {
+                print("❌ DECODING ERROR:", error)
+                print("📦 RAW:", String(data: data, encoding: .utf8) ?? "nil")
+                throw APIError.decodingError(error)
+            }
         } catch let error as APIError {
             throw error
         } catch {

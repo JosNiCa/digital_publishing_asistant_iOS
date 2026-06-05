@@ -11,6 +11,7 @@ struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
     @State private var selectedFilter: PublicationFilter = .pendientes
     @State private var selectedPendingItem: FusionItem?
+    @State private var itemPendingNetworkDeletion: FusionItem?
     @State private var completionResult: FusionCompletionResult?
     
     private let fusionRepository: FusionRepository
@@ -26,7 +27,8 @@ struct HistoryView: View {
         
         _viewModel = StateObject(
             wrappedValue: HistoryViewModel(
-                mediaRepository: mediaRepository
+                mediaRepository: mediaRepository,
+                publishingRepository: publishingRepository
             )
         )
     }
@@ -74,6 +76,27 @@ struct HistoryView: View {
             }
         } message: {
             Text(completionResult?.message ?? "")
+        }
+        .alert(
+            "Eliminar de redes",
+            isPresented: Binding(
+                get: { itemPendingNetworkDeletion != nil },
+                set: { if !$0 { itemPendingNetworkDeletion = nil } }
+            )
+        ) {
+            Button("Cancelar", role: .cancel) {
+                itemPendingNetworkDeletion = nil
+            }
+
+            Button("Eliminar", role: .destructive) {
+                guard let item = itemPendingNetworkDeletion else { return }
+                itemPendingNetworkDeletion = nil
+                Task {
+                    await viewModel.deletePublishedPost(item)
+                }
+            }
+        } message: {
+            Text("Se intentará eliminar la publicación de Facebook/Instagram usando los IDs guardados en la fusión.")
         }
         .task {
             await viewModel.loadFusions()
@@ -124,6 +147,7 @@ private extension HistoryView {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     summaryCard
+                    actionMessages
 
                     if filteredItems.isEmpty {
                         emptyFilteredState
@@ -186,6 +210,19 @@ private extension HistoryView {
             return viewModel.agendadas
         case .publicadas:
             return viewModel.publicadas
+        case .eliminadasRedes:
+            return viewModel.eliminadasRedes
+        }
+    }
+
+    @ViewBuilder
+    var actionMessages: some View {
+        if let message = viewModel.successMessage {
+            messageBanner(message, systemImage: "checkmark.circle.fill", tint: AppColors.positive)
+        }
+
+        if let message = viewModel.actionErrorMessage {
+            messageBanner(message, systemImage: "exclamationmark.triangle.fill", tint: AppColors.brand)
         }
     }
     
@@ -204,7 +241,14 @@ private extension HistoryView {
 
             LazyVStack(spacing: 10) {
                 ForEach(items) { item in
-                    FusionRow(item: item, isActionable: selectedFilter == .pendientes)
+                    FusionRow(
+                        item: item,
+                        isActionable: selectedFilter == .pendientes,
+                        isDeleting: viewModel.isDeleting(item),
+                        onDeleteFromNetworks: item.canDeletePost ? {
+                            itemPendingNetworkDeletion = item
+                        } : nil
+                    )
                         .contentShape(Rectangle())
                         .onTapGesture {
                             guard selectedFilter == .pendientes else { return }
@@ -224,7 +268,22 @@ private extension HistoryView {
             return count == 1 ? "1 publicación programada." : "\(count) publicaciones programadas."
         case .publicadas:
             return count == 1 ? "1 publicación enviada." : "\(count) publicaciones enviadas."
+        case .eliminadasRedes:
+            return count == 1 ? "1 publicación eliminada de redes." : "\(count) publicaciones eliminadas de redes."
         }
+    }
+
+    func messageBanner(_ text: String, systemImage: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(tint)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -232,6 +291,7 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
     case pendientes
     case agendadas
     case publicadas
+    case eliminadasRedes
     
     var id: String { rawValue }
     
@@ -243,6 +303,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "Agendadas"
         case .publicadas:
             return "Publicadas"
+        case .eliminadasRedes:
+            return "Eliminadas"
         }
     }
     
@@ -250,6 +312,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
         switch self {
         case .agendadas:
             return "Programadas"
+        case .eliminadasRedes:
+            return "Eliminadas de redes"
         default:
             return title
         }
@@ -263,6 +327,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "No hay agendadas"
         case .publicadas:
             return "No hay publicadas"
+        case .eliminadasRedes:
+            return "No hay eliminadas"
         }
     }
     
@@ -274,6 +340,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "calendar.badge.clock"
         case .publicadas:
             return "checkmark.circle"
+        case .eliminadasRedes:
+            return "trash.circle"
         }
     }
 }
@@ -282,6 +350,8 @@ private struct FusionRow: View {
     
     let item: FusionItem
     let isActionable: Bool
+    let isDeleting: Bool
+    let onDeleteFromNetworks: (() -> Void)?
     
     var body: some View {
         HStack(spacing: 14) {
@@ -314,7 +384,11 @@ private struct FusionRow: View {
                     .foregroundStyle(.secondary)
                 
                 HStack(spacing: 8) {
-                    StatusBadge(text: item.formato, systemImage: "rectangle.3.group", tint: AppColors.softInk)
+                    StatusBadge(text: item.displayFormat, systemImage: "rectangle.3.group", tint: AppColors.softInk)
+
+                    if let platformName = item.platformDisplayName {
+                        StatusBadge(text: platformName, systemImage: "paperplane.fill", tint: AppColors.brand)
+                    }
 
                     if let fechaPublicacion = item.fechaPublicacion {
                         Text(fechaPublicacion.formatted(date: .abbreviated, time: .shortened))
@@ -327,7 +401,25 @@ private struct FusionRow: View {
 
             Spacer(minLength: 8)
 
-            if isActionable {
+            if let onDeleteFromNetworks {
+                Button {
+                    onDeleteFromNetworks()
+                } label: {
+                    if isDeleting {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Image(systemName: "trash.fill")
+                            .font(.caption.weight(.bold))
+                    }
+                }
+                .disabled(isDeleting)
+                .foregroundStyle(AppColors.brand)
+                .frame(width: 34, height: 34)
+                .background(AppColors.brand.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityLabel("Eliminar publicación de redes")
+            } else if isActionable {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)

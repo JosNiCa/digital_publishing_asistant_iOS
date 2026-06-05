@@ -13,6 +13,7 @@ enum Endpoint {
     case fusionPreview(photoId: Int)
     case fusionDetail(fusionId: Int)
     case publishFusion
+    case deletePublishedPost
     case scheduledPosts
     case publishingHealth
     case fusionSave(photoId: Int)
@@ -42,6 +43,9 @@ enum Endpoint {
             
         case .publishFusion:
             return "/api/publishing/publicar-fusion/"
+
+        case .deletePublishedPost:
+            return "/api/publishing/eliminar-post/"
 
         case .scheduledPosts:
             return "/api/publishing/programadas/"
@@ -75,6 +79,8 @@ enum Endpoint {
             case .fusionDetail:
                 return "GET"
             case .publishFusion:
+                return "POST"
+            case .deletePublishedPost:
                 return "POST"
             case .scheduledPosts:
                 return "GET"

@@ -256,6 +256,11 @@ final class PreviewViewModel: ObservableObject {
                 return false
             }
 
+            if let connectionMessage = missingConnectionMessage(for: connection) {
+                errorMessage = connectionMessage
+                return false
+            }
+
             // Construir scheduled_time
             let timestamp = buildTimestamp()
             
@@ -351,6 +356,28 @@ final class PreviewViewModel: ObservableObject {
         return platforms
             .map(\.key)
             .filter { selectedPlatformKeys.contains($0) }
+    }
+
+    private func platformKeysForValidation() -> Set<String> {
+        if canChoosePlatforms {
+            return Set((platformsForRequest() ?? []).map { $0.lowercased() })
+        }
+
+        return Set(platforms.map { $0.key.lowercased() })
+    }
+
+    private func missingConnectionMessage(for connection: ConnectionStatus) -> String? {
+        let platformKeys = platformKeysForValidation()
+
+        if platformKeys.contains("facebook"), !connection.facebookConnected {
+            return "Facebook no está conectado para este distribuidor."
+        }
+
+        if platformKeys.contains("instagram"), !connection.instagramConnected {
+            return "Instagram no está conectado para este distribuidor."
+        }
+
+        return nil
     }
 
     private func publishErrorMessage(from error: Error) -> String {

@@ -40,6 +40,23 @@ final class PublishingRepositoryImpl: PublishingRepository {
             )
         }
     }
+
+    func deletePublishedPost(fusionId: Int) async throws {
+        let body = DeletePublishedPostRequestDTO(fusionId: fusionId)
+
+        let response: DeletePublishedPostResponseDTO = try await apiClient.request(
+            endpoint: .deletePublishedPost,
+            body: body,
+            requiresAuth: true
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                code: nil,
+                message: response.message ?? "No se pudo eliminar la publicación."
+            )
+        }
+    }
     
     func verifyConnection() async throws -> ConnectionStatus {
         let response: ConnectionResponseDTO = try await apiClient.request(
