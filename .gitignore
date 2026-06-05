@@ -1,0 +1,60 @@
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+*.xcbkptlist
+
+# Xcode build and test output
+build/
+Build/
+DerivedData/
+*.xcresult
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+
+# CocoaPods and Carthage generated output
+Pods/
+Carthage/Build/
+
+# Local configuration and secrets
+.env
+.env.*
+*.local
+*.local.*
+*.xcconfig.local
+Secrets.xcconfig
+
+# IDE and assistant local state
+.idea/
+.vscode/
+.codex/
+.agents/
+
+# Fastlane generated output
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
