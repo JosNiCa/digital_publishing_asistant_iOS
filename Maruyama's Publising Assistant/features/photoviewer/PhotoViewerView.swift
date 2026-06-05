@@ -230,6 +230,13 @@ struct PhotoViewerView: View {
                 messageRow(errorMessage, systemImage: "exclamationmark.circle.fill", tint: AppColors.brand)
             } else if viewModel.selectedLogoId == nil {
                 messageRow("Selecciona un logo para ver las posiciones disponibles.", systemImage: "hand.tap.fill", tint: AppColors.softInk)
+            } else if viewModel.isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Generando fusión...")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             } else if viewModel.isLoadingPositions {
                 HStack(spacing: 10) {
                     ProgressView()
@@ -327,7 +334,9 @@ struct PhotoViewerView: View {
                 ForEach(viewModel.positionOptions) { option in
                     if viewModel.selectedCoordinate != option.id {
                         Button {
-                            viewModel.selectPosition(option)
+                            Task {
+                                await viewModel.selectPosition(option)
+                            }
                         } label: {
                             ZStack {
                                 Circle()

@@ -155,7 +155,7 @@ private extension HistoryView {
                         section(title: selectedFilter.sectionTitle, items: filteredItems)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 10)
                 .padding(.bottom, 28)
             }
         }
@@ -354,7 +354,7 @@ private struct FusionRow: View {
     let onDeleteFromNetworks: (() -> Void)?
     
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
             RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
                 switch state {
                 case .loading:
@@ -370,64 +370,142 @@ private struct FusionRow: View {
                     AppColors.field
                 }
             }
-            .frame(width: 72, height: 72)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(width: 70, height: 70)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.productoNombre)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.ink)
-                    .lineLimit(2)
+                    .lineLimit(1)
                 
                 Text(item.distributorName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 
-                HStack(spacing: 8) {
-                    StatusBadge(text: item.displayFormat, systemImage: "rectangle.3.group", tint: AppColors.softInk)
-
-                    if let platformName = item.platformDisplayName {
-                        StatusBadge(text: platformName, systemImage: "paperplane.fill", tint: AppColors.brand)
-                    }
-
-                    if let fechaPublicacion = item.fechaPublicacion {
-                        Text(fechaPublicacion.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                tagRow
             }
 
             Spacer(minLength: 8)
 
-            if let onDeleteFromNetworks {
-                Button {
-                    onDeleteFromNetworks()
-                } label: {
-                    if isDeleting {
-                        ProgressView()
-                            .controlSize(.mini)
-                    } else {
-                        Image(systemName: "trash.fill")
-                            .font(.caption.weight(.bold))
-                    }
-                }
-                .disabled(isDeleting)
-                .foregroundStyle(AppColors.brand)
-                .frame(width: 34, height: 34)
-                .background(AppColors.brand.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityLabel("Eliminar publicación de redes")
-            } else if isActionable {
+            if isActionable, onDeleteFromNetworks == nil {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)
+                    .padding(.top, 29)
             }
         }
-        .padding(12)
+        .padding(10)
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
+    }
+
+    private var tagRow: some View {
+        HStack(spacing: 5) {
+            HistoryTag(
+                title: formatTagTitle,
+                systemImage: "rectangle.3.group",
+                tint: AppColors.softInk
+            )
+
+            if !item.platforms.isEmpty {
+                HistoryTag(
+                    title: platformTagTitle,
+                    systemImage: "paperplane.fill",
+                    tint: AppColors.brand
+                )
+            }
+
+            if let fechaPublicacion = item.fechaPublicacion {
+                HistoryTag(
+                    title: dateTagTitle(fechaPublicacion),
+                    systemImage: "calendar",
+                    tint: AppColors.softInk
+                )
+                .overlay(alignment: .top) {
+                    deleteButton
+                        .offset(y: -45)
+                }
+            } else {
+                deleteButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var deleteButton: some View {
+        if let onDeleteFromNetworks {
+            Button {
+                onDeleteFromNetworks()
+            } label: {
+                if isDeleting {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "trash.fill")
+                        .font(.caption2.weight(.bold))
+                }
+            }
+            .disabled(isDeleting)
+            .foregroundStyle(AppColors.brand)
+            .frame(width: 34, height: 34)
+            .background(AppColors.brand.opacity(0.12))
+            .clipShape(Circle())
+            .accessibilityLabel("Eliminar publicación de redes")
+        }
+    }
+
+    private var formatTagTitle: String {
+        switch item.formato.lowercased() {
+        case "horizontal":
+            return "Horizontal"
+        case "cuadrado", "square":
+            return "Cuadrado"
+        case "semivertical", "semi_vertical", "semi-vertical":
+            return "Semivertical"
+        case "vertical":
+            return "Vertical"
+        default:
+            return item.formato.capitalized
+        }
+    }
+
+    private var platformTagTitle: String {
+        let keys = item.platforms.map { $0.key.lowercased() }
+        if keys.contains("facebook"), keys.contains("instagram") {
+            return "FB + IG"
+        }
+
+        return item.platforms.first?.name ?? "Red"
+    }
+
+    private func dateTagTitle(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated))
+    }
+}
+
+private struct HistoryTag: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption2.weight(.bold))
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(tint.opacity(0.10))
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
     }
 }

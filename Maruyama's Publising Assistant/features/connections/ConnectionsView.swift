@@ -29,6 +29,8 @@ struct ConnectionsView: View {
                 } else {
                     statusContent
                 }
+
+                accountManagementSection
             }
             .padding(16)
         }
@@ -198,6 +200,48 @@ struct ConnectionsView: View {
             }
             .buttonStyle(PrimaryCapsuleButtonStyle())
         }
+        .appCard(cornerRadius: 22, padding: 16)
+    }
+
+    private var accountManagementSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionEyebrow("Cuenta", systemImage: "person.crop.circle")
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Gestión centralizada")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(AppColors.ink)
+
+                Text("Esta app pertenece a un ecosistema cerrado. El alta de usuarios, la privacidad y la eliminación de datos se gestionan desde la plataforma principal.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Apple account deletion requirement: the app exposes a visible deletion entry point.
+            // Once the web URL is configured, the shared link component confirms before leaving the app.
+            ExternalWebLinkButton(
+                title: "Eliminar cuenta",
+                subtitle: AppExternalLinks.accountDeletion == nil
+                    ? "URL de eliminación pendiente de configurar."
+                    : "Abre la solicitud web de eliminación de cuenta.",
+                systemImage: "person.crop.circle.badge.xmark",
+                url: AppExternalLinks.accountDeletion,
+                tint: AppColors.brand,
+                requiresConfirmation: true,
+                confirmationTitle: "Eliminar cuenta",
+                confirmationMessage: "La eliminación se gestiona en la plataforma web principal. ¿Quieres abrir el enlace externo para continuar?"
+            )
+
+            ExternalWebLinkButton(
+                title: "Política de privacidad",
+                subtitle: "Consulta cómo se gestionan y protegen tus datos.",
+                systemImage: "hand.raised.fill",
+                url: AppExternalLinks.privacyPolicy,
+                tint: AppColors.softInk
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .appCard(cornerRadius: 22, padding: 16)
     }
 }
