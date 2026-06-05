@@ -1266,7 +1266,7 @@ private struct PhotoCell: View {
                 endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 if let productName = photo.productName, !productName.isEmpty {
                     Text(productName)
                         .font(.caption.weight(.bold))
@@ -1274,23 +1274,24 @@ private struct PhotoCell: View {
                         .lineLimit(1)
                 }
 
-                HStack(spacing: 6) {
-                    if let origin = photo.origin, !origin.isEmpty {
-                        Text(origin.capitalized)
-                    }
-
-                    if let platformName = photo.platform?.name, !platformName.isEmpty {
-                        Text(platformName)
-                    }
+                if let origin = photo.origin, !origin.isEmpty {
+                    Text(origin.capitalized)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .lineLimit(1)
                 }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.86))
-                .lineLimit(1)
+
+                if let platformName = photo.platformDisplayName, !platformName.isEmpty {
+                    Text(platformName)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .lineLimit(1)
+                }
             }
             .padding(10)
-            .padding(.trailing, photo.platform?.iconUrl == nil ? 0 : 42)
+            .padding(.trailing, displayPlatformsWithIcons.isEmpty ? 0 : 42)
 
-            platformIcon
+            platformIcons
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
         .aspectRatio(aspectRatio, contentMode: .fit)
@@ -1301,33 +1302,82 @@ private struct PhotoCell: View {
     }
 
     @ViewBuilder
-    private var platformIcon: some View {
-        if let platform = photo.platform,
-           let iconUrl = platform.iconUrl {
+    private var platformIcons: some View {
+        if !displayPlatformsWithIcons.isEmpty {
+            VStack(spacing: 4) {
+                ForEach(displayPlatformsWithIcons) { platform in
+                    platformIcon(for: platform)
+                }
+            }
+            .padding(6)
+            .accessibilityLabel(platformAccessibilityLabel)
+        }
+    }
+
+    @ViewBuilder
+    private func platformIcon(for platform: PublishingPlatform) -> some View {
+        if let iconUrl = platform.iconUrl {
             RetryingRemoteImage(url: iconUrl, maxRetries: 1) { state, _ in
                 switch state {
                 case .loading:
-                    ProgressView()
-                        .controlSize(.mini)
-                        .frame(width: 24, height: 24)
-                        .padding(5)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Circle())
+                    platformIconBackground {
+                        ProgressView()
+                            .controlSize(.mini)
+                    }
                 case .success(let image):
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 24, height: 24)
-                        .padding(5)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Circle())
+                    platformIconBackground {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                    }
                 case .failure:
                     EmptyView()
                 }
             }
-            .padding(6)
-            .accessibilityLabel(platform.name.isEmpty ? "Plataforma" : platform.name)
         }
+    }
+
+    private var displayPlatformsWithIcons: [PublishingPlatform] {
+        let platforms = photo.displayPlatforms.filter { $0.iconUrl != nil }
+        var seenKeys = Set<String>()
+
+        return platforms
+            .filter { platform in
+                let key = platform.key.lowercased()
+                guard !seenKeys.contains(key) else { return false }
+                seenKeys.insert(key)
+                return true
+            }
+            .sorted { lhs, rhs in
+                platformSortPriority(lhs) < platformSortPriority(rhs)
+            }
+    }
+
+    private var platformAccessibilityLabel: String {
+        let names = displayPlatformsWithIcons.map(\.name).filter { !$0.isEmpty }
+        guard !names.isEmpty else { return "Plataformas" }
+        return names.joined(separator: ", ")
+    }
+
+    private func platformSortPriority(_ platform: PublishingPlatform) -> Int {
+        switch platform.key.lowercased() {
+        case "facebook":
+            return 0
+        case "instagram":
+            return 1
+        default:
+            return 2
+        }
+    }
+
+    private func platformIconBackground<Content: View>(
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .frame(width: 24, height: 24)
+            .padding(5)
+            .background(.ultraThinMaterial)
+            .clipShape(Circle())
     }
 
     private func completeRenderIfNeeded() {
@@ -1357,8 +1407,9 @@ private extension Photo {
             productName,
             origin,
             state,
-            platform?.key,
-            platform?.name,
+            primaryPlatform?.key,
+            displayPlatforms.map(\.key).joined(separator: " "),
+            platformDisplayName,
             formatDisplay,
             serverFormat,
             createdAt,

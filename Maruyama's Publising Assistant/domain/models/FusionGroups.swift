@@ -9,4 +9,5 @@ struct FusionGroups {
     let pendientes: [FusionItem]
     let agendadas: [FusionItem]
     let publicadas: [FusionItem]
+    let eliminadasRedes: [FusionItem]
 }

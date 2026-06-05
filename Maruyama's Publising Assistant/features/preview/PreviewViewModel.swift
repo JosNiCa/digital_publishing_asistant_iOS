@@ -11,28 +11,31 @@ import SwiftUI
 struct PreviewInput {
     let imageBase64: String?
     let imageUrl: String?
-    let photoId: Int
-    let distributorId: Int?
-    let coordinate: Int
+    let photoId: Int?
+    let logoId: Int?
+    let coordinate: Int?
     let fusionId: Int? 
     let caption: String?
+    let platforms: [PublishingPlatform]
     
     init(
         imageBase64: String? = nil,
         imageUrl: String? = nil,
-        photoId: Int,
-        distributorId: Int? = nil,
-        coordinate: Int,
+        photoId: Int? = nil,
+        logoId: Int? = nil,
+        coordinate: Int? = nil,
         fusionId: Int?,
-        caption: String? = nil
+        caption: String? = nil,
+        platforms: [PublishingPlatform] = []
     ) {
         self.imageBase64 = imageBase64
         self.imageUrl = imageUrl
         self.photoId = photoId
-        self.distributorId = distributorId
+        self.logoId = logoId
         self.coordinate = coordinate
         self.fusionId = fusionId
         self.caption = caption
+        self.platforms = platforms
     }
 }
 
@@ -56,9 +59,15 @@ final class PreviewViewModel: ObservableObject {
     @Published var successMessage: String?
     @Published var scheduledDate: Date?
     @Published var canRetryPublish: Bool = false
+    @Published var selectedPlatformKeys: Set<String>
+    @Published private(set) var platforms: [PublishingPlatform]
 
     // MARK: - Internal State
     private(set) var fusionId: Int?
+    private var photoId: Int?
+    private var logoId: Int?
+    private var coordinate: Int?
+    private var didLoadFusionDetail = false
 
     // MARK: - Init
     init(
@@ -70,7 +79,12 @@ final class PreviewViewModel: ObservableObject {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
         self.fusionId = input.fusionId
+        self.photoId = input.photoId
+        self.logoId = input.logoId
+        self.coordinate = input.coordinate
         self.caption = input.caption ?? ""
+        self.platforms = input.platforms
+        self.selectedPlatformKeys = Set(input.platforms.map(\.key))
         
         self.decodeImage()
     }
@@ -98,6 +112,46 @@ final class PreviewViewModel: ObservableObject {
 
     // MARK: - Actions
 
+    func loadFusionDetailIfNeeded() async {
+        guard image == nil, imageUrl == nil, !didLoadFusionDetail else { return }
+        guard let fusionId else { return }
+
+        didLoadFusionDetail = true
+        isLoading = true
+        loadingMessage = "Cargando fusión..."
+        errorMessage = nil
+
+        defer {
+            isLoading = false
+            loadingMessage = nil
+        }
+
+        do {
+            let detail = try await fusionRepository.fetchFusionDetail(fusionId: fusionId)
+            photoId = detail.photoId
+            logoId = detail.distributorId
+            coordinate = detail.coordinate
+
+            if caption.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                caption = detail.caption ?? ""
+            }
+
+            if !detail.platforms.isEmpty {
+                platforms = detail.platforms
+                selectedPlatformKeys = Set(detail.platforms.map(\.key))
+            }
+
+            guard let uiImage = ImageDataDecoder.image(fromBase64: detail.imageBase64) else {
+                errorMessage = "Error al procesar la imagen"
+                return
+            }
+
+            image = uiImage
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func saveFusion() async -> Bool {
         
         guard !isLoading else { return false }
@@ -108,7 +162,7 @@ final class PreviewViewModel: ObservableObject {
             return true
         }
         
-        guard let distributorId = input.distributorId else {
+        guard let photoId, let logoId, let coordinate else {
             errorMessage = "Faltan datos para guardar la fusión"
             return false
         }
@@ -126,18 +180,18 @@ final class PreviewViewModel: ObservableObject {
         
         do {
             let id = try await fusionRepository.saveFusion(
-                photoId: input.photoId,
-                logoId: distributorId,
-                coordinate: input.coordinate,
+                photoId: photoId,
+                logoId: logoId,
+                coordinate: coordinate,
                 caption: captionForRequest()
             )
             
             self.fusionId = id
             
             FusionSession.shared.fusionId = id
-            FusionSession.shared.photoId = input.photoId
-            FusionSession.shared.distributorId = input.distributorId
-            FusionSession.shared.coordinate = input.coordinate
+            FusionSession.shared.photoId = photoId
+            FusionSession.shared.logoId = logoId
+            FusionSession.shared.coordinate = coordinate
             
             successMessage = "Fusión guardada (ID: \(id))"
             FusionSession.shared.clear()
@@ -172,21 +226,21 @@ final class PreviewViewModel: ObservableObject {
         do {
             // Asegurar que exista fusionId
             if fusionId == nil {
-                guard let distributorId = input.distributorId else {
+                guard let photoId, let logoId, let coordinate else {
                     errorMessage = "Faltan datos para publicar la fusión"
                     return false
                 }
                 
                 let id = try await fusionRepository.saveFusion(
-                    photoId: input.photoId,
-                    logoId: distributorId,
-                    coordinate: input.coordinate,
+                    photoId: photoId,
+                    logoId: logoId,
+                    coordinate: coordinate,
                     caption: captionForRequest()
                 )
                 fusionId = id
-                FusionSession.shared.photoId = input.photoId
-                FusionSession.shared.distributorId = input.distributorId
-                FusionSession.shared.coordinate = input.coordinate
+                FusionSession.shared.photoId = photoId
+                FusionSession.shared.logoId = logoId
+                FusionSession.shared.coordinate = coordinate
                 FusionSession.shared.fusionId = id
             }
             
@@ -202,6 +256,11 @@ final class PreviewViewModel: ObservableObject {
                 return false
             }
 
+            if let connectionMessage = missingConnectionMessage(for: connection) {
+                errorMessage = connectionMessage
+                return false
+            }
+
             // Construir scheduled_time
             let timestamp = buildTimestamp()
             
@@ -209,12 +268,18 @@ final class PreviewViewModel: ObservableObject {
                 errorMessage = "No puedes programar en el pasado"
                 return false
             }
+
+            if platformsForRequest()?.isEmpty == true {
+                errorMessage = "Selecciona al menos una plataforma"
+                return false
+            }
             
             // Publicar
             try await publishingRepository.publishFusion(
                 fusionId: fusionId,
                 caption: caption,
-                scheduledTime: timestamp
+                scheduledTime: timestamp,
+                platforms: platformsForRequest()
             )
             
             if timestamp != nil {
@@ -247,12 +312,72 @@ final class PreviewViewModel: ObservableObject {
             return false
         }
 
+        if platformsForRequest()?.isEmpty == true {
+            errorMessage = "Selecciona al menos una plataforma"
+            return false
+        }
+
         return true
     }
 
     private func captionForRequest() -> String? {
         let value = caption.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? nil : value
+    }
+
+    var canChoosePlatforms: Bool {
+        platforms.count > 1
+    }
+
+    func togglePlatform(_ platform: PublishingPlatform) {
+        if selectedPlatformKeys.contains(platform.key) {
+            guard selectedPlatformKeys.count > 1 else {
+                errorMessage = "Selecciona al menos una plataforma"
+                return
+            }
+
+            selectedPlatformKeys.remove(platform.key)
+        } else {
+            selectedPlatformKeys.insert(platform.key)
+        }
+
+        errorMessage = nil
+    }
+
+    func isPlatformSelected(_ platform: PublishingPlatform) -> Bool {
+        selectedPlatformKeys.contains(platform.key)
+    }
+
+    private func platformsForRequest() -> [String]? {
+        guard canChoosePlatforms else {
+            return nil
+        }
+
+        return platforms
+            .map(\.key)
+            .filter { selectedPlatformKeys.contains($0) }
+    }
+
+    private func platformKeysForValidation() -> Set<String> {
+        if canChoosePlatforms {
+            return Set((platformsForRequest() ?? []).map { $0.lowercased() })
+        }
+
+        return Set(platforms.map { $0.key.lowercased() })
+    }
+
+    private func missingConnectionMessage(for connection: ConnectionStatus) -> String? {
+        let platformKeys = platformKeysForValidation()
+
+        if platformKeys.contains("facebook"), !connection.facebookConnected {
+            return "Facebook no está conectado para este distribuidor."
+        }
+
+        if platformKeys.contains("instagram"), !connection.instagramConnected {
+            return "Instagram no está conectado para este distribuidor."
+        }
+
+        return nil
     }
 
     private func publishErrorMessage(from error: Error) -> String {

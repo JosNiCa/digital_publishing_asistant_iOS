@@ -23,19 +23,28 @@ struct LoginView: View {
             AppColors.canvas.ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .center, spacing: 32) {
-                    header
+                VStack(alignment: .center, spacing: 0) {
+                    Spacer(minLength: 40)
 
-                    VStack(spacing: 18) {
-                        credentialsCard
-                        loginAction
+                    VStack(alignment: .center, spacing: 28) {
+                        header
+
+                        VStack(spacing: 16) {
+                            credentialsCard
+                            loginAction
+                        }
+                        .frame(maxWidth: 420)
                     }
-                    .frame(maxWidth: 420)
+
+                    Spacer(minLength: 36)
+
+                    registrationNotice
+                        .frame(maxWidth: 420)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: geometry.size.height, alignment: .center)
                 .padding(.horizontal, 22)
-                .padding(.bottom, 28)
+                .padding(.bottom, 24)
             }
             .scrollDismissesKeyboard(.interactively)
         }
@@ -55,11 +64,12 @@ struct LoginView: View {
 
             VStack(spacing: 12) {
                 inputRow(
-                    title: "Usuario",
+                    title: "Correo",
                     systemImage: "person.crop.circle",
                     isFocused: focusedField == .username
                 ) {
-                    TextField("tu usuario", text: $loginViewModel.username)
+                    TextField("tu correo", text: $loginViewModel.username)
+                        .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .focused($focusedField, equals: .username)
@@ -109,6 +119,31 @@ struct LoginView: View {
         }
         .disabled(loginViewModel.isLoading)
         .buttonStyle(PrimaryCapsuleButtonStyle(isEnabled: !loginViewModel.isLoading))
+    }
+
+    private var registrationNotice: some View {
+        VStack(spacing: 6) {
+            // App Store 5.1.1: reviewers and users can see that accounts are provisioned
+            // through the existing web platform without competing visually with the login form.
+            Text("¿No tienes una cuenta? Las cuentas se crean en nuestra plataforma web.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            InlineWebLink(
+                title: "Regístrate en la plataforma web",
+                url: AppExternalLinks.registration
+            )
+
+            InlineWebLink(
+                title: "Política de privacidad",
+                url: AppExternalLinks.privacyPolicy,
+                font: .caption.weight(.medium)
+            )
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity)
     }
 
     private func inputRow<Content: View>(

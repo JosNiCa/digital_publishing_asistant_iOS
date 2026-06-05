@@ -46,6 +46,8 @@ struct FusionDetailDTO: Decodable {
     let distributorId: Int
     let coordenada: Int
     let caption: String?
+    let platform: PlatformDTO?
+    let platforms: [PlatformDTO]?
 }
 
 extension FusionDetailResponseDTO {
@@ -62,7 +64,18 @@ extension FusionDetailResponseDTO {
             photoId: data.photoId,
             distributorId: data.distributorId,
             coordinate: data.coordenada,
-            caption: data.caption
+            caption: data.caption,
+            platforms: data.displayPlatforms
         )
+    }
+}
+
+private extension FusionDetailDTO {
+    var displayPlatforms: [PublishingPlatform] {
+        if let platforms, !platforms.isEmpty {
+            return platforms.map { $0.toDomain() }
+        }
+
+        return platform.map { [$0.toDomain()] } ?? []
     }
 }

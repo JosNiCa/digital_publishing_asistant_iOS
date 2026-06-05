@@ -15,13 +15,13 @@ final class FusionRepositoryImpl: FusionRepository {
     
     func applyFusion(
         photoId: Int,
-        distributorId: Int,
+        logoId: Int,
         coordinate: Int,
         caption: String? = nil
     ) async throws -> FusionResult {
         
         let body = FusionRequestDTO(
-            logoId: distributorId,
+            logoId: logoId,
             coordenada: coordinate,
             caption: caption
         )

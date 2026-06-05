@@ -11,6 +11,7 @@ struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
     @State private var selectedFilter: PublicationFilter = .pendientes
     @State private var selectedPendingItem: FusionItem?
+    @State private var itemPendingNetworkDeletion: FusionItem?
     @State private var completionResult: FusionCompletionResult?
     
     private let fusionRepository: FusionRepository
@@ -26,7 +27,8 @@ struct HistoryView: View {
         
         _viewModel = StateObject(
             wrappedValue: HistoryViewModel(
-                mediaRepository: mediaRepository
+                mediaRepository: mediaRepository,
+                publishingRepository: publishingRepository
             )
         )
     }
@@ -38,8 +40,8 @@ struct HistoryView: View {
                 .navigationBarTitleDisplayMode(.large)
                 .appScreenBackground()
                 .navigationDestination(item: $selectedPendingItem) { item in
-                    FusionDetailPreviewView(
-                        item: item,
+                    PreviewView(
+                        input: item.previewInput,
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
                         onComplete: { result in
@@ -75,78 +77,29 @@ struct HistoryView: View {
         } message: {
             Text(completionResult?.message ?? "")
         }
+        .alert(
+            "Eliminar de redes",
+            isPresented: Binding(
+                get: { itemPendingNetworkDeletion != nil },
+                set: { if !$0 { itemPendingNetworkDeletion = nil } }
+            )
+        ) {
+            Button("Cancelar", role: .cancel) {
+                itemPendingNetworkDeletion = nil
+            }
+
+            Button("Eliminar", role: .destructive) {
+                guard let item = itemPendingNetworkDeletion else { return }
+                itemPendingNetworkDeletion = nil
+                Task {
+                    await viewModel.deletePublishedPost(item)
+                }
+            }
+        } message: {
+            Text("Se intentará eliminar la publicación de Facebook/Instagram usando los IDs guardados en la fusión.")
+        }
         .task {
             await viewModel.loadFusions()
-        }
-    }
-}
-
-private struct FusionDetailPreviewView: View {
-    let item: FusionItem
-    let fusionRepository: FusionRepository
-    let publishingRepository: PublishingRepository
-    let onComplete: @MainActor (FusionCompletionResult) -> Void
-    let onBackgroundPublishStarted: @MainActor () -> Void
-    let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
-
-    @State private var input: PreviewInput?
-    @State private var errorMessage: String?
-
-    var body: some View {
-        Group {
-            if let input {
-                PreviewView(
-                    input: input,
-                    fusionRepository: fusionRepository,
-                    publishingRepository: publishingRepository,
-                    onComplete: onComplete,
-                    onBackgroundPublishStarted: onBackgroundPublishStarted,
-                    onBackgroundPublishFinished: onBackgroundPublishFinished
-                )
-            } else if let errorMessage {
-                VStack(spacing: 12) {
-                    Text(errorMessage)
-                        .foregroundColor(.secondary)
-
-                    Button("Continuar con miniatura") {
-                        input = fallbackInput
-                    }
-                }
-                .padding()
-            } else {
-                ProgressView("Cargando fusión...")
-            }
-        }
-        .task {
-            await loadDetail()
-        }
-    }
-
-    private var fallbackInput: PreviewInput {
-        PreviewInput(
-            imageUrl: item.thumbnailUrl,
-            photoId: item.photoId,
-            coordinate: item.coordenada,
-            fusionId: item.id,
-            caption: item.caption
-        )
-    }
-
-    private func loadDetail() async {
-        guard input == nil, errorMessage == nil else { return }
-
-        do {
-            let detail = try await fusionRepository.fetchFusionDetail(fusionId: item.id)
-            input = PreviewInput(
-                imageBase64: detail.imageBase64,
-                photoId: detail.photoId,
-                distributorId: detail.distributorId,
-                coordinate: detail.coordinate,
-                fusionId: item.id,
-                caption: detail.caption
-            )
-        } catch {
-            errorMessage = "No pudimos cargar la imagen completa de esta fusión."
         }
     }
 }
@@ -175,6 +128,16 @@ private extension HistoryView {
     }
 }
 
+private extension FusionItem {
+    var previewInput: PreviewInput {
+        PreviewInput(
+            fusionId: id,
+            caption: caption,
+            platforms: platforms
+        )
+    }
+}
+
 private extension HistoryView {
     
     var list: some View {
@@ -184,6 +147,7 @@ private extension HistoryView {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 14) {
                     summaryCard
+                    actionMessages
 
                     if filteredItems.isEmpty {
                         emptyFilteredState
@@ -191,7 +155,7 @@ private extension HistoryView {
                         section(title: selectedFilter.sectionTitle, items: filteredItems)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 10)
                 .padding(.bottom, 28)
             }
         }
@@ -246,6 +210,19 @@ private extension HistoryView {
             return viewModel.agendadas
         case .publicadas:
             return viewModel.publicadas
+        case .eliminadasRedes:
+            return viewModel.eliminadasRedes
+        }
+    }
+
+    @ViewBuilder
+    var actionMessages: some View {
+        if let message = viewModel.successMessage {
+            messageBanner(message, systemImage: "checkmark.circle.fill", tint: AppColors.positive)
+        }
+
+        if let message = viewModel.actionErrorMessage {
+            messageBanner(message, systemImage: "exclamationmark.triangle.fill", tint: AppColors.brand)
         }
     }
     
@@ -264,7 +241,14 @@ private extension HistoryView {
 
             LazyVStack(spacing: 10) {
                 ForEach(items) { item in
-                    FusionRow(item: item, isActionable: selectedFilter == .pendientes)
+                    FusionRow(
+                        item: item,
+                        isActionable: selectedFilter == .pendientes,
+                        isDeleting: viewModel.isDeleting(item),
+                        onDeleteFromNetworks: item.canDeletePost ? {
+                            itemPendingNetworkDeletion = item
+                        } : nil
+                    )
                         .contentShape(Rectangle())
                         .onTapGesture {
                             guard selectedFilter == .pendientes else { return }
@@ -284,7 +268,22 @@ private extension HistoryView {
             return count == 1 ? "1 publicación programada." : "\(count) publicaciones programadas."
         case .publicadas:
             return count == 1 ? "1 publicación enviada." : "\(count) publicaciones enviadas."
+        case .eliminadasRedes:
+            return count == 1 ? "1 publicación eliminada de redes." : "\(count) publicaciones eliminadas de redes."
         }
+    }
+
+    func messageBanner(_ text: String, systemImage: String, tint: Color) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: systemImage)
+            Text(text)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(tint)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
@@ -292,6 +291,7 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
     case pendientes
     case agendadas
     case publicadas
+    case eliminadasRedes
     
     var id: String { rawValue }
     
@@ -303,6 +303,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "Agendadas"
         case .publicadas:
             return "Publicadas"
+        case .eliminadasRedes:
+            return "Eliminadas"
         }
     }
     
@@ -310,6 +312,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
         switch self {
         case .agendadas:
             return "Programadas"
+        case .eliminadasRedes:
+            return "Eliminadas de redes"
         default:
             return title
         }
@@ -323,6 +327,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "No hay agendadas"
         case .publicadas:
             return "No hay publicadas"
+        case .eliminadasRedes:
+            return "No hay eliminadas"
         }
     }
     
@@ -334,6 +340,8 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
             return "calendar.badge.clock"
         case .publicadas:
             return "checkmark.circle"
+        case .eliminadasRedes:
+            return "trash.circle"
         }
     }
 }
@@ -342,9 +350,11 @@ private struct FusionRow: View {
     
     let item: FusionItem
     let isActionable: Bool
+    let isDeleting: Bool
+    let onDeleteFromNetworks: (() -> Void)?
     
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
             RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
                 switch state {
                 case .loading:
@@ -360,42 +370,142 @@ private struct FusionRow: View {
                     AppColors.field
                 }
             }
-            .frame(width: 72, height: 72)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(width: 70, height: 70)
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
             
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.productoNombre)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(AppColors.ink)
-                    .lineLimit(2)
+                    .lineLimit(1)
                 
                 Text(item.distributorName)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 
-                HStack(spacing: 8) {
-                    StatusBadge(text: item.formato, systemImage: "rectangle.3.group", tint: AppColors.softInk)
-
-                    if let fechaPublicacion = item.fechaPublicacion {
-                        Text(fechaPublicacion.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                tagRow
             }
 
             Spacer(minLength: 8)
 
-            if isActionable {
+            if isActionable, onDeleteFromNetworks == nil {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.tertiary)
+                    .padding(.top, 29)
             }
         }
-        .padding(12)
+        .padding(10)
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
+    }
+
+    private var tagRow: some View {
+        HStack(spacing: 5) {
+            HistoryTag(
+                title: formatTagTitle,
+                systemImage: "rectangle.3.group",
+                tint: AppColors.softInk
+            )
+
+            if !item.platforms.isEmpty {
+                HistoryTag(
+                    title: platformTagTitle,
+                    systemImage: "paperplane.fill",
+                    tint: AppColors.brand
+                )
+            }
+
+            if let fechaPublicacion = item.fechaPublicacion {
+                HistoryTag(
+                    title: dateTagTitle(fechaPublicacion),
+                    systemImage: "calendar",
+                    tint: AppColors.softInk
+                )
+                .overlay(alignment: .top) {
+                    deleteButton
+                        .offset(y: -45)
+                }
+            } else {
+                deleteButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var deleteButton: some View {
+        if let onDeleteFromNetworks {
+            Button {
+                onDeleteFromNetworks()
+            } label: {
+                if isDeleting {
+                    ProgressView()
+                        .controlSize(.mini)
+                } else {
+                    Image(systemName: "trash.fill")
+                        .font(.caption2.weight(.bold))
+                }
+            }
+            .disabled(isDeleting)
+            .foregroundStyle(AppColors.brand)
+            .frame(width: 34, height: 34)
+            .background(AppColors.brand.opacity(0.12))
+            .clipShape(Circle())
+            .accessibilityLabel("Eliminar publicación de redes")
+        }
+    }
+
+    private var formatTagTitle: String {
+        switch item.formato.lowercased() {
+        case "horizontal":
+            return "Horizontal"
+        case "cuadrado", "square":
+            return "Cuadrado"
+        case "semivertical", "semi_vertical", "semi-vertical":
+            return "Semivertical"
+        case "vertical":
+            return "Vertical"
+        default:
+            return item.formato.capitalized
+        }
+    }
+
+    private var platformTagTitle: String {
+        let keys = item.platforms.map { $0.key.lowercased() }
+        if keys.contains("facebook"), keys.contains("instagram") {
+            return "FB + IG"
+        }
+
+        return item.platforms.first?.name ?? "Red"
+    }
+
+    private func dateTagTitle(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated))
+    }
+}
+
+private struct HistoryTag: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption2.weight(.bold))
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .frame(height: 28)
+        .background(tint.opacity(0.10))
+        .clipShape(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
     }
 }

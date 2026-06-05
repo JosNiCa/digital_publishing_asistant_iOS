@@ -5,6 +5,8 @@
 //  Created by LJD Technology on 26/03/26.
 //
 
+import Foundation
+
 final class MediaRepositoryImpl: MediaRepository {
     private let apiClient: APIClient
     
@@ -15,14 +17,17 @@ final class MediaRepositoryImpl: MediaRepository {
     func fetchPhotos() async throws -> [Photo] {
         var page = 1
         var photos: [Photo] = []
-        let isAdmin = await MainActor.run {
-            SessionManager.shared.isAdmin
+        let session = await MainActor.run {
+            (
+                isLoggedIn: SessionManager.shared.isLoggedIn,
+                isAdmin: SessionManager.shared.isAdmin
+            )
         }
 
         while true {
             let response: PhotosResponseDTO = try await apiClient.request(
-                endpoint: .getPhotos(page: page, pageSize: 100, includeAllStates: isAdmin),
-                requiresAuth: isAdmin
+                endpoint: .getPhotos(page: page, pageSize: 100, includeAllStates: session.isAdmin),
+                sendsAuthIfAvailable: session.isLoggedIn
             )
 
             photos.append(contentsOf: response.results.map { $0.toDomain() })
@@ -36,12 +41,34 @@ final class MediaRepositoryImpl: MediaRepository {
     }
     
     func fetchFusions() async throws -> FusionGroups {
-        let response: FusionsResponseDTO = try await apiClient.request(
-            endpoint: .fusionsList,
-            requiresAuth: false
-        )
-        
+        let isLoggedIn = await MainActor.run {
+            SessionManager.shared.isLoggedIn
+        }
+
+        let response: FusionsResponseDTO
+        do {
+            response = try await fetchFusionsResponse(sendsAuthIfAvailable: isLoggedIn)
+        } catch {
+            guard isLoggedIn, Self.isFusionThumbnailReverseError(error) else {
+                throw error
+            }
+
+            response = try await fetchFusionsResponse(sendsAuthIfAvailable: false)
+        }
+
         guard response.ok, let data = response.data else {
+            if isLoggedIn, Self.isFusionThumbnailReverseMessage(response.error) {
+                let publicResponse = try await fetchFusionsResponse(sendsAuthIfAvailable: false)
+                guard publicResponse.ok, let publicData = publicResponse.data else {
+                    throw APIError.serverError(
+                        code: nil,
+                        message: publicResponse.error ?? response.error ?? "Error cargando fusiones"
+                    )
+                }
+
+                return publicData.toDomain()
+            }
+
             throw APIError.serverError(
                 code: nil,
                 message: response.error ?? "Error cargando fusiones"
@@ -49,5 +76,28 @@ final class MediaRepositoryImpl: MediaRepository {
         }
 
         return data.toDomain()
+    }
+
+    private func fetchFusionsResponse(sendsAuthIfAvailable: Bool) async throws -> FusionsResponseDTO {
+        try await apiClient.request(
+            endpoint: .fusionsList,
+            sendsAuthIfAvailable: sendsAuthIfAvailable
+        )
+    }
+
+    private static func isFusionThumbnailReverseError(_ error: Error) -> Bool {
+        if let apiError = error as? APIError,
+           case .serverError(_, let message) = apiError {
+            return isFusionThumbnailReverseMessage(message)
+        }
+
+        return isFusionThumbnailReverseMessage(error.localizedDescription)
+    }
+
+    private static func isFusionThumbnailReverseMessage(_ message: String?) -> Bool {
+        guard let message else { return false }
+
+        return message.contains("fusion_thumbnail")
+            && message.localizedCaseInsensitiveContains("reverse")
     }
 }

@@ -16,13 +16,15 @@ final class PublishingRepositoryImpl: PublishingRepository {
     func publishFusion(
         fusionId: Int,
         caption: String,
-        scheduledTime: Int?
+        scheduledTime: Int?,
+        platforms: [String]?
     ) async throws {
 
         let body = PublishRequestDTO(
             idFusion: fusionId,
             caption: caption,
-            scheduledTime: scheduledTime
+            scheduledTime: scheduledTime,
+            platforms: platforms
         )
 
         let response: PublishResponseDTO = try await apiClient.request(
@@ -35,6 +37,23 @@ final class PublishingRepositoryImpl: PublishingRepository {
             throw APIError.serverError(
                 code: nil,
                 message: response.message ?? "No se pudo publicar."
+            )
+        }
+    }
+
+    func deletePublishedPost(fusionId: Int) async throws {
+        let body = DeletePublishedPostRequestDTO(fusionId: fusionId)
+
+        let response: DeletePublishedPostResponseDTO = try await apiClient.request(
+            endpoint: .deletePublishedPost,
+            body: body,
+            requiresAuth: true
+        )
+
+        guard response.success else {
+            throw APIError.serverError(
+                code: nil,
+                message: response.message ?? "No se pudo eliminar la publicación."
             )
         }
     }
