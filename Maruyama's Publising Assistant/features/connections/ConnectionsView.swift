@@ -10,11 +10,17 @@ import SwiftUI
 struct ConnectionsView: View {
 
     @StateObject private var viewModel: ConnectionsViewModel
+    @Environment(\.openURL) private var openURL
+    @State private var isShowingAccountDeletionConfirmation = false
 
-    init(publishingRepository: PublishingRepository) {
+    init(
+        publishingRepository: PublishingRepository,
+        authRepository: AuthRepository
+    ) {
         _viewModel = StateObject(
             wrappedValue: ConnectionsViewModel(
-                publishingRepository: publishingRepository
+                publishingRepository: publishingRepository,
+                authRepository: authRepository
             )
         )
     }
@@ -56,6 +62,23 @@ struct ConnectionsView: View {
         }
         .refreshable {
             await viewModel.loadStatus()
+        }
+        .alert("Eliminar cuenta", isPresented: $isShowingAccountDeletionConfirmation) {
+            Button("Cancelar", role: .cancel) {}
+            Button("Continuar", role: .destructive) {
+                Task {
+                    await openAccountDeletionRequest()
+                }
+            }
+        } message: {
+            Text("Se abrirá la plataforma web con una sesión temporal para solicitar la eliminación de tu cuenta.")
+        }
+        .alert("No se pudo abrir la solicitud", isPresented: accountDeletionErrorBinding) {
+            Button("OK") {
+                viewModel.accountDeletionErrorMessage = nil
+            }
+        } message: {
+            Text(viewModel.accountDeletionErrorMessage ?? "")
         }
     }
 
@@ -218,20 +241,15 @@ struct ConnectionsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            // Apple account deletion requirement: the app exposes a visible deletion entry point.
-            // Once the web URL is configured, the shared link component confirms before leaving the app.
-            ExternalWebLinkButton(
+            AccountDeletionRequestButton(
                 title: "Eliminar cuenta",
-                subtitle: AppExternalLinks.accountDeletion == nil
-                    ? "URL de eliminación pendiente de configurar."
-                    : "Abre la solicitud web de eliminación de cuenta.",
+                subtitle: "Abre la solicitud web de eliminación con acceso temporal.",
                 systemImage: "person.crop.circle.badge.xmark",
-                url: AppExternalLinks.accountDeletion,
                 tint: AppColors.brand,
-                requiresConfirmation: true,
-                confirmationTitle: "Eliminar cuenta",
-                confirmationMessage: "La eliminación se gestiona en la plataforma web principal. ¿Quieres abrir el enlace externo para continuar?"
-            )
+                isLoading: viewModel.isRequestingAccountDeletionURL
+            ) {
+                isShowingAccountDeletionConfirmation = true
+            }
 
             ExternalWebLinkButton(
                 title: "Política de privacidad",
@@ -243,6 +261,74 @@ struct ConnectionsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .appCard(cornerRadius: 22, padding: 16)
+    }
+
+    private var accountDeletionErrorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.accountDeletionErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    viewModel.accountDeletionErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func openAccountDeletionRequest() async {
+        guard let url = await viewModel.requestAccountDeletionURL() else { return }
+        openURL(url)
+    }
+}
+
+private struct AccountDeletionRequestButton: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let tint: Color
+    let isLoading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 36, height: 36)
+                    .background(tint.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.ink)
+                        .multilineTextAlignment(.leading)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 8)
+
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.up.forward.app")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(tint)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppColors.field)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+        .accessibilityHint("Abre una página web externa para solicitar eliminación de cuenta")
     }
 }
 

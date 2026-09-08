@@ -10,6 +10,7 @@ import SwiftUI
 struct MainTabView: View {
 
     let mediaRepository: MediaRepository
+    let authRepository: AuthRepository
     private let apiClient = APIClient()
     @ObservedObject private var publishingActivity = PublishingActivityCenter.shared
     
@@ -43,7 +44,8 @@ struct MainTabView: View {
             // MARK: - Conexiones (placeholder)
             NavigationStack {
                 ConnectionsView(
-                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient)
+                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient),
+                    authRepository: authRepository
                 )
             }
             .tabItem {

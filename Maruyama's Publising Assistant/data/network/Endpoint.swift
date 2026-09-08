@@ -8,6 +8,7 @@
 enum Endpoint {
     case login
     case me
+    case webLoginTicket
     case getPhotos(page: Int, pageSize: Int, includeAllStates: Bool)
     case getDistributors
     case fusionPreview(photoId: Int)
@@ -27,6 +28,9 @@ enum Endpoint {
             
         case .me:
             return "/api/accounts/me/"
+
+        case .webLoginTicket:
+            return "/api/accounts/web-login-ticket/"
             
         case .getPhotos(let page, let pageSize, let includeAllStates):
             let state = includeAllStates ? "&estado=todas" : ""
@@ -70,6 +74,8 @@ enum Endpoint {
                 return "POST"
             case .me:
                 return "GET"
+            case .webLoginTicket:
+                return "POST"
             case .getPhotos:
                 return "GET"
             case .getDistributors:

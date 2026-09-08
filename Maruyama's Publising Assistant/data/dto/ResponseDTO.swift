@@ -5,6 +5,8 @@
 //  Created by LJD Technology on 23/03/26.
 //
 
+import Foundation
+
 struct LoginResponseDTO: Codable {
     let ok: Bool
     let data: DataDTO?
@@ -74,4 +76,19 @@ struct ProfileDTO: Codable {
 struct ErrorDTO: Codable {
     let code: String?
     let message: String
+}
+
+struct WebLoginTicketRequestDTO: Encodable {
+    let next: String
+}
+
+struct WebLoginTicketResponseDTO: Decodable {
+    let ok: Bool
+    let data: WebLoginTicketDataDTO?
+    let error: ErrorDTO?
+}
+
+struct WebLoginTicketDataDTO: Decodable {
+    let loginUrl: URL
+    let expiresIn: Int
 }

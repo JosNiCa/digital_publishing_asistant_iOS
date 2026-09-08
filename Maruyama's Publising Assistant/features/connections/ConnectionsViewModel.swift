@@ -13,11 +13,18 @@ final class ConnectionsViewModel: ObservableObject {
     @Published var status: ConnectionStatus?
     @Published var errorMessage: String?
     @Published var isLoading = false
+    @Published var isRequestingAccountDeletionURL = false
+    @Published var accountDeletionErrorMessage: String?
 
     private let publishingRepository: PublishingRepository
+    private let authRepository: AuthRepository
 
-    init(publishingRepository: PublishingRepository) {
+    init(
+        publishingRepository: PublishingRepository,
+        authRepository: AuthRepository
+    ) {
         self.publishingRepository = publishingRepository
+        self.authRepository = authRepository
     }
 
     func loadStatus() async {
@@ -33,6 +40,22 @@ final class ConnectionsViewModel: ObservableObject {
         } catch {
             status = nil
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func requestAccountDeletionURL() async -> URL? {
+        guard !isRequestingAccountDeletionURL else { return nil }
+
+        isRequestingAccountDeletionURL = true
+        accountDeletionErrorMessage = nil
+
+        defer { isRequestingAccountDeletionURL = false }
+
+        do {
+            return try await authRepository.requestAccountDeletionURL()
+        } catch {
+            accountDeletionErrorMessage = error.localizedDescription
+            return nil
         }
     }
 }

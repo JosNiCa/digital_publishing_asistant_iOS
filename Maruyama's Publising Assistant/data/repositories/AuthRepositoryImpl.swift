@@ -78,4 +78,30 @@ final class AuthRepositoryImpl: AuthRepository {
         
         return session
     }
+
+    func requestAccountDeletionURL() async throws -> URL {
+        let request = WebLoginTicketRequestDTO(next: "/account-deactivation/")
+
+        let response: WebLoginTicketResponseDTO = try await apiClient.request(
+            endpoint: .webLoginTicket,
+            body: request,
+            requiresAuth: true
+        )
+
+        guard response.ok else {
+            throw APIError.serverError(
+                code: response.error?.code,
+                message: response.error?.message ?? "No se pudo generar el acceso a eliminación de cuenta."
+            )
+        }
+
+        guard let loginURL = response.data?.loginUrl else {
+            throw APIError.serverError(
+                code: nil,
+                message: "La respuesta no incluyó el enlace de eliminación de cuenta."
+            )
+        }
+
+        return loginURL
+    }
 }

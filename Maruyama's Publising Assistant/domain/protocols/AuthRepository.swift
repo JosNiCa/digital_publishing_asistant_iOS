@@ -5,6 +5,9 @@
 //  Created by LJD Technology on 23/03/26.
 //
 
+import Foundation
+
 protocol AuthRepository {
     func login(username: String, password: String) async throws -> AuthSession
+    func requestAccountDeletionURL() async throws -> URL
 }

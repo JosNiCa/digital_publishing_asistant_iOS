@@ -24,7 +24,10 @@ struct Maruyama_s_Publising_AssistantApp: App {
         WindowGroup {
             Group {
                  if session.isLoggedIn {
-                     MainTabView(mediaRepository: mediaRepository)
+                     MainTabView(
+                        mediaRepository: mediaRepository,
+                        authRepository: authRepository
+                     )
                  } else {
                      LoginView(authRepository: authRepository)
                  }
@@ -38,4 +41,3 @@ struct Maruyama_s_Publising_AssistantApp: App {
         }
     }
 }
-
