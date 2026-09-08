@@ -16,14 +16,20 @@ struct HistoryView: View {
     
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
     
     init(
         mediaRepository: MediaRepository,
         fusionRepository: FusionRepository,
-        publishingRepository: PublishingRepository
+        publishingRepository: PublishingRepository,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter
     ) {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         
         _viewModel = StateObject(
             wrappedValue: HistoryViewModel(
@@ -34,36 +40,36 @@ struct HistoryView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Publicaciones")
-                .navigationBarTitleDisplayMode(.large)
-                .appScreenBackground()
-                .navigationDestination(item: $selectedPendingItem) { item in
-                    PreviewView(
-                        input: item.previewInput,
-                        fusionRepository: fusionRepository,
-                        publishingRepository: publishingRepository,
-                        onComplete: { result in
-                            FusionSession.shared.clear()
-                            completionResult = result
-                            selectedPendingItem = nil
-                            Task {
-                                await viewModel.loadFusions()
-                            }
-                        },
-                        onBackgroundPublishStarted: {
-                            selectedPendingItem = nil
-                        },
-                        onBackgroundPublishFinished: { _ in
-                            FusionSession.shared.clear()
-                            Task {
-                                await viewModel.loadFusions()
-                            }
+        content
+            .navigationTitle("Publicaciones")
+            .navigationBarTitleDisplayMode(.large)
+            .appScreenBackground()
+            .navigationDestination(item: $selectedPendingItem) { item in
+                PreviewView(
+                    input: item.previewInput,
+                    fusionRepository: fusionRepository,
+                    publishingRepository: publishingRepository,
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity,
+                    onComplete: { result in
+                        fusionSession.clear()
+                        completionResult = result
+                        selectedPendingItem = nil
+                        Task {
+                            await viewModel.loadFusions()
                         }
-                    )
-                }
-        }
+                    },
+                    onBackgroundPublishStarted: {
+                        selectedPendingItem = nil
+                    },
+                    onBackgroundPublishFinished: { _ in
+                        fusionSession.clear()
+                        Task {
+                            await viewModel.loadFusions()
+                        }
+                    }
+                )
+            }
         .alert(
             completionResult?.title ?? "",
             isPresented: Binding(

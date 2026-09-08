@@ -41,11 +41,15 @@ struct PreviewView: View {
     private let onComplete: @MainActor (FusionCompletionResult) -> Void
     private let onBackgroundPublishStarted: @MainActor () -> Void
     private let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
 
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
         publishingRepository: PublishingRepository,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter,
         onComplete: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in },
         onBackgroundPublishStarted: @escaping @MainActor () -> Void = {},
         onBackgroundPublishFinished: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
@@ -53,11 +57,14 @@ struct PreviewView: View {
         self.onComplete = onComplete
         self.onBackgroundPublishStarted = onBackgroundPublishStarted
         self.onBackgroundPublishFinished = onBackgroundPublishFinished
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         _viewModel = StateObject(
             wrappedValue: PreviewViewModel(
                 input: input,
                 fusionRepository: fusionRepository,
-                publishingRepository: publishingRepository
+                publishingRepository: publishingRepository,
+                fusionSession: fusionSession
             )
         )
     }
@@ -77,6 +84,7 @@ struct PreviewView: View {
             .padding(.bottom, 28)
             .readableContent(maxWidth: 980)
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Preview")
         .navigationBarTitleDisplayMode(.inline)
         .appScreenBackground()
@@ -328,7 +336,7 @@ private extension PreviewView {
         guard viewModel.canStartPublishing() else { return }
 
         let result: FusionCompletionResult = viewModel.scheduledDate == nil ? .published : .scheduled
-        let activity = PublishingActivityCenter.shared
+        let activity = publishingActivity
         let publisher = viewModel
 
         activity.begin(isScheduled: result == .scheduled)

@@ -12,7 +12,8 @@ struct MainTabView: View {
     let mediaRepository: MediaRepository
     let authRepository: AuthRepository
     private let apiClient = APIClient()
-    @ObservedObject private var publishingActivity = PublishingActivityCenter.shared
+    @StateObject private var fusionSession = FusionSession()
+    @StateObject private var publishingActivity = PublishingActivityCenter()
     
     var body: some View {
         TabView {
@@ -20,9 +21,9 @@ struct MainTabView: View {
             // MARK: - Home
             NavigationStack {
                 PhotoListView(
-                    photoListViewModel: PhotoListViewModel(
-                        mediaRepository: mediaRepository
-                    )
+                    photoListViewModel: PhotoListViewModel(mediaRepository: mediaRepository),
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity
                 )
             }
             .tabItem {
@@ -34,7 +35,9 @@ struct MainTabView: View {
                 HistoryView(
                     mediaRepository: mediaRepository,
                     fusionRepository: FusionRepositoryImpl(apiClient: apiClient),
-                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient)
+                    publishingRepository: PublishingRepositoryImpl(apiClient: apiClient),
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity
                 )
             }
             .tabItem {

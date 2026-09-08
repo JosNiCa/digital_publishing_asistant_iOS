@@ -36,9 +36,17 @@ struct PhotoListView: View {
     private let distributorRepository: DistributorRepositoryImpl
     private let fusionRepository: FusionRepositoryImpl
     private let publishingRepository: PublishingRepositoryImpl
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
         
-    init(photoListViewModel: PhotoListViewModel) {
+    init(
+        photoListViewModel: PhotoListViewModel,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter
+    ) {
         _viewModel = StateObject(wrappedValue: photoListViewModel)
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         let apiClient = APIClient()
         self.apiClient = apiClient
         self.distributorRepository = DistributorRepositoryImpl(apiClient: apiClient)
@@ -47,87 +55,87 @@ struct PhotoListView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Fotos")
-                .navigationBarTitleDisplayMode(.large)
-                .appScreenBackground()
-                .task {
-                    await viewModel.loadPhotos()
-                }
-                .refreshable {
-                    await viewModel.refresh()
-                }
-                .navigationDestination(item: $selectedPhoto) { photo in
-                    PhotoViewerView(
-                        photo: photo,
-                        distributorRepository: distributorRepository,
-                        fusionRepository: fusionRepository,
-                        publishingRepository: publishingRepository,
-                        onFusionCompleted: { result in
-                            FusionSession.shared.clear()
-                            completionResult = result
-                            selectedPhoto = nil
-                        },
-                        onBackgroundPublishStarted: {
-                            selectedPhoto = nil
-                        },
-                        onBackgroundPublishFinished: { _ in
-                            FusionSession.shared.clear()
-                            Task {
-                                await viewModel.refresh()
-                            }
+        content
+            .navigationTitle("Fotos")
+            .navigationBarTitleDisplayMode(.large)
+            .appScreenBackground()
+            .task {
+                await viewModel.loadPhotos()
+            }
+            .refreshable {
+                await viewModel.refresh()
+            }
+            .navigationDestination(item: $selectedPhoto) { photo in
+                PhotoViewerView(
+                    photo: photo,
+                    distributorRepository: distributorRepository,
+                    fusionRepository: fusionRepository,
+                    publishingRepository: publishingRepository,
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity,
+                    onFusionCompleted: { result in
+                        fusionSession.clear()
+                        completionResult = result
+                        selectedPhoto = nil
+                    },
+                    onBackgroundPublishStarted: {
+                        selectedPhoto = nil
+                    },
+                    onBackgroundPublishFinished: { _ in
+                        fusionSession.clear()
+                        Task {
+                            await viewModel.refresh()
                         }
-                    )
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isShowingSearch.toggle()
-                            }
-                            if isShowingSearch {
-                                isSearchFocused = true
-                            }
-                        } label: {
-                            Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                                .foregroundStyle(AppColors.brand)
-                        }
-                        .accessibilityLabel("Buscar fotos")
                     }
+                )
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingSearch.toggle()
+                        }
+                        if isShowingSearch {
+                            isSearchFocused = true
+                        }
+                    } label: {
+                        Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                            .foregroundStyle(AppColors.brand)
+                    }
+                    .accessibilityLabel("Buscar fotos")
+                }
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showLogoutConfirm = true
-                        } label: {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundStyle(AppColors.brand)
-                        }
-                        .accessibilityLabel("Cerrar sesión")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showLogoutConfirm = true
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .foregroundStyle(AppColors.brand)
                     }
+                    .accessibilityLabel("Cerrar sesión")
                 }
-                .alert("Cerrar sesión", isPresented: $showLogoutConfirm) {
-                    Button("Cancelar", role: .cancel) {}
-                    Button("Cerrar sesión", role: .destructive) {
-                        SessionManager.shared.logout()
-                    }
-                } message: {
-                    Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
+            }
+            .alert("Cerrar sesión", isPresented: $showLogoutConfirm) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Cerrar sesión", role: .destructive) {
+                    SessionManager.shared.logout()
                 }
-                .alert(
-                    completionResult?.title ?? "",
-                    isPresented: Binding(
-                        get: { completionResult != nil },
-                        set: { if !$0 { completionResult = nil } }
-                    )
-                ) {
-                    Button("Entendido", role: .cancel) {
-                        completionResult = nil
-                    }
-                } message: {
-                    Text(completionResult?.message ?? "")
+            } message: {
+                Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
+            }
+            .alert(
+                completionResult?.title ?? "",
+                isPresented: Binding(
+                    get: { completionResult != nil },
+                    set: { if !$0 { completionResult = nil } }
+                )
+            ) {
+                Button("Entendido", role: .cancel) {
+                    completionResult = nil
                 }
-        }
+            } message: {
+                Text(completionResult?.message ?? "")
+            }
     }
     
     @ViewBuilder

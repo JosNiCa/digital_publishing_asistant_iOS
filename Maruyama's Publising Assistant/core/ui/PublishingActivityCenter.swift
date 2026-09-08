@@ -8,8 +8,6 @@ import SwiftUI
 
 @MainActor
 final class PublishingActivityCenter: ObservableObject {
-    static let shared = PublishingActivityCenter()
-
     enum State: Equatable {
         case idle
         case publishing(isScheduled: Bool)
@@ -20,7 +18,7 @@ final class PublishingActivityCenter: ObservableObject {
     @Published private(set) var state: State = .idle
     private var dismissTask: Task<Void, Never>?
 
-    private init() {}
+    init() {}
 
     func begin(isScheduled: Bool) {
         dismissTask?.cancel()

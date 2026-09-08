@@ -48,6 +48,7 @@ final class PreviewViewModel: ObservableObject {
     // MARK: - Dependencies
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
+    private let fusionSession: FusionSession
 
     // MARK: - UI State
     @Published var caption: String = ""
@@ -73,11 +74,13 @@ final class PreviewViewModel: ObservableObject {
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
-        publishingRepository: PublishingRepository
+        publishingRepository: PublishingRepository,
+        fusionSession: FusionSession
     ) {
         self.input = input
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
+        self.fusionSession = fusionSession
         self.fusionId = input.fusionId
         self.photoId = input.photoId
         self.logoId = input.logoId
@@ -158,7 +161,7 @@ final class PreviewViewModel: ObservableObject {
         
         if fusionId != nil {
             successMessage = "La fusión ya fue guardada"
-            FusionSession.shared.clear()
+            fusionSession.clear()
             return true
         }
         
@@ -188,13 +191,13 @@ final class PreviewViewModel: ObservableObject {
             
             self.fusionId = id
             
-            FusionSession.shared.fusionId = id
-            FusionSession.shared.photoId = photoId
-            FusionSession.shared.logoId = logoId
-            FusionSession.shared.coordinate = coordinate
+            fusionSession.fusionId = id
+            fusionSession.photoId = photoId
+            fusionSession.logoId = logoId
+            fusionSession.coordinate = coordinate
             
             successMessage = "Fusión guardada (ID: \(id))"
-            FusionSession.shared.clear()
+            fusionSession.clear()
             return true
             
         } catch {
@@ -238,10 +241,10 @@ final class PreviewViewModel: ObservableObject {
                     caption: captionForRequest()
                 )
                 fusionId = id
-                FusionSession.shared.photoId = photoId
-                FusionSession.shared.logoId = logoId
-                FusionSession.shared.coordinate = coordinate
-                FusionSession.shared.fusionId = id
+                fusionSession.photoId = photoId
+                fusionSession.logoId = logoId
+                fusionSession.coordinate = coordinate
+                fusionSession.fusionId = id
             }
             
             guard let fusionId else {
@@ -288,11 +291,11 @@ final class PreviewViewModel: ObservableObject {
                 successMessage = "Publicado correctamente"
             }
             
-            FusionSession.shared.clear()
+            fusionSession.clear()
             return true
             
         } catch {
-            FusionSession.shared.clear()
+            fusionSession.clear()
             canRetryPublish = fusionId != nil
             errorMessage = publishErrorMessage(from: error)
             return false
