@@ -45,14 +45,16 @@ struct PhotoViewerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerSection
-                imageSection
-                distributorSection
-                coordinateSection
-                previewAction
+                AdaptiveTwoColumnLayout {
+                    imageSection
+                } secondary: {
+                    detailControls
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
+            .readableContent(maxWidth: 980)
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
                    let logoId = viewModel.selectedLogoId,
@@ -160,6 +162,14 @@ struct PhotoViewerView: View {
                     viewModel.selectedCoordinate != nil
             )
         )
+    }
+
+    private var detailControls: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            distributorSection
+            coordinateSection
+            previewAction
+        }
     }
     
     private var imageSection: some View {

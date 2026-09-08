@@ -39,6 +39,7 @@ struct ConnectionsView: View {
                 accountManagementSection
             }
             .padding(16)
+            .readableContent(maxWidth: 720)
         }
         .navigationTitle("Conexión")
         .navigationBarTitleDisplayMode(.large)

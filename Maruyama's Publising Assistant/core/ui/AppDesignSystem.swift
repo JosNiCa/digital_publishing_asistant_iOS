@@ -24,6 +24,16 @@ struct AppScreenBackground: ViewModifier {
     }
 }
 
+private struct ReadableContentWidth: ViewModifier {
+    let maxWidth: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
+}
+
 extension View {
     func appScreenBackground() -> some View {
         modifier(AppScreenBackground())
@@ -38,6 +48,54 @@ extension View {
             .background(AppColors.elevated)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .shadow(color: .black.opacity(0.05), radius: 18, x: 0, y: 8)
+    }
+
+    func readableContent(maxWidth: CGFloat) -> some View {
+        modifier(ReadableContentWidth(maxWidth: maxWidth))
+    }
+}
+
+struct AdaptiveTwoColumnLayout<Primary: View, Secondary: View>: View {
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private let minimumPrimaryWidth: CGFloat
+    private let secondaryWidth: CGFloat
+    private let spacing: CGFloat
+    private let primary: Primary
+    private let secondary: Secondary
+
+    init(
+        minimumPrimaryWidth: CGFloat = 320,
+        secondaryWidth: CGFloat = 360,
+        spacing: CGFloat = 18,
+        @ViewBuilder primary: () -> Primary,
+        @ViewBuilder secondary: () -> Secondary
+    ) {
+        self.minimumPrimaryWidth = minimumPrimaryWidth
+        self.secondaryWidth = secondaryWidth
+        self.spacing = spacing
+        self.primary = primary()
+        self.secondary = secondary()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            if verticalSizeClass != .compact {
+                HStack(alignment: .top, spacing: spacing) {
+                    primary
+                        .frame(minWidth: minimumPrimaryWidth, maxWidth: .infinity, alignment: .topLeading)
+
+                    secondary
+                        .frame(width: secondaryWidth, alignment: .topLeading)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: spacing) {
+                primary
+                secondary
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

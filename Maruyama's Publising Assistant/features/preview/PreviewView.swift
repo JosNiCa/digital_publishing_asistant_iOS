@@ -66,15 +66,16 @@ struct PreviewView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 header
-                contentImage
-                captionInput
-                platformSection
-                scheduleSection
-                actionsSection
+                AdaptiveTwoColumnLayout {
+                    contentImage
+                } secondary: {
+                    publicationControls
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
+            .readableContent(maxWidth: 980)
         }
         .navigationTitle("Preview")
         .navigationBarTitleDisplayMode(.inline)
@@ -99,6 +100,15 @@ struct PreviewView: View {
         }
         .appCard(cornerRadius: 22, padding: 16)
     }
+
+    var publicationControls: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            captionInput
+            platformSection
+            scheduleSection
+            actionsSection
+        }
+    }
 }
 
 private extension PreviewView {
@@ -109,7 +119,10 @@ private extension PreviewView {
             VStack(alignment: .leading, spacing: 12) {
                 SectionEyebrow("Plataformas", systemImage: "square.grid.2x2.fill")
 
-                HStack(spacing: 10) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 138), spacing: 10)],
+                    spacing: 10
+                ) {
                     ForEach(viewModel.platforms) { platform in
                         Button {
                             viewModel.togglePlatform(platform)

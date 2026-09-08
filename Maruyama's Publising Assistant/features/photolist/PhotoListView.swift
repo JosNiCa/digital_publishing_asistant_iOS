@@ -148,11 +148,6 @@ struct PhotoListView: View {
         }
     }
     
-    private let compactColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
-    
     private var gridView: some View {
         let visiblePhotos = filteredPhotos
 
@@ -182,7 +177,6 @@ struct PhotoListView: View {
                             title: format.title,
                             format: format,
                             photos: photos,
-                            compactColumns: compactColumns,
                             onSelect: selectPhoto
                         )
                     }
@@ -191,6 +185,7 @@ struct PhotoListView: View {
             .padding(.horizontal, 16)
             .padding(.top, 6)
             .padding(.bottom, 28)
+            .readableContent(maxWidth: 1_000)
         }
         .background(AppColors.canvas)
     }
@@ -1004,7 +999,6 @@ private struct PhotoFormatSection: View {
     let title: String
     let format: PhotoFormat
     let photos: [Photo]
-    let compactColumns: [GridItem]
     let onSelect: (Photo) -> Void
 
     var body: some View {
@@ -1023,33 +1017,13 @@ private struct PhotoFormatSection: View {
                 Spacer()
             }
 
-            if format == .horizontal {
-                LazyVStack(spacing: 10) {
-                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
-                        PhotoRenderBlock(
-                            blockIndex: index,
-                            format: format,
-                            photos: blockPhotos,
-                            compactColumns: compactColumns,
-                            onSelect: onSelect
-                        )
-                        .id(blockPhotos.map(\.id))
-                    }
-                }
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(Array(photos.chunked(into: 4).enumerated()), id: \.offset) { index, blockPhotos in
-                        PhotoRenderBlock(
-                            blockIndex: index,
-                            format: format,
-                            photos: blockPhotos,
-                            compactColumns: compactColumns,
-                            onSelect: onSelect
-                        )
-                        .id(blockPhotos.map(\.id))
-                    }
-                }
-            }
+            PhotoRenderBlock(
+                blockIndex: 0,
+                format: format,
+                photos: photos,
+                onSelect: onSelect
+            )
+            .id(photos.map(\.id))
         }
         .padding(.top, 2)
     }
@@ -1059,7 +1033,6 @@ private struct PhotoRenderBlock: View {
     let blockIndex: Int
     let format: PhotoFormat
     let photos: [Photo]
-    let compactColumns: [GridItem]
     let onSelect: (Photo) -> Void
 
     @State private var loadedPhotoIDs: Set<Int> = []
@@ -1075,6 +1048,18 @@ private struct PhotoRenderBlock: View {
 
     private var photoIDs: [Int] {
         photos.map(\.id)
+    }
+
+    private var gridColumns: [GridItem] {
+        let minimumWidth = format == .horizontal ? 240.0 : 150.0
+        let maximumWidth = format == .horizontal ? 320.0 : 220.0
+
+        return [
+            GridItem(
+                .adaptive(minimum: minimumWidth, maximum: maximumWidth),
+                spacing: 10
+            )
+        ]
     }
 
     var body: some View {
@@ -1106,40 +1091,15 @@ private struct PhotoRenderBlock: View {
 
     @ViewBuilder
     private var blockContent: some View {
-        if format == .horizontal {
-            LazyVStack(spacing: 10) {
-                ForEach(photos) { photo in
-                    PhotoCell(
-                        photo: photo,
-                        aspectRatio: format.displayAspectRatio,
-                        onRenderComplete: markLoaded
-                    )
-                    .onTapGesture {
-                        onSelect(photo)
-                    }
-                }
-            }
-        } else {
-            LazyVStack(spacing: 10) {
-                ForEach(Array(photos.chunked(into: 2).enumerated()), id: \.offset) { _, rowPhotos in
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(rowPhotos) { photo in
-                            PhotoCell(
-                                photo: photo,
-                                aspectRatio: format.displayAspectRatio,
-                                onRenderComplete: markLoaded
-                            )
-                            .onTapGesture {
-                                onSelect(photo)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-
-                        if rowPhotos.count == 1 {
-                            Spacer(minLength: 0)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
+        LazyVGrid(columns: gridColumns, spacing: 10) {
+            ForEach(photos) { photo in
+                PhotoCell(
+                    photo: photo,
+                    aspectRatio: format.displayAspectRatio,
+                    onRenderComplete: markLoaded
+                )
+                .onTapGesture {
+                    onSelect(photo)
                 }
             }
         }

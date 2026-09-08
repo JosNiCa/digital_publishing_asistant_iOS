@@ -159,6 +159,7 @@ private extension HistoryView {
                 .padding(.bottom, 28)
             }
         }
+        .readableContent(maxWidth: 860)
         .background(AppColors.canvas)
     }
 }
