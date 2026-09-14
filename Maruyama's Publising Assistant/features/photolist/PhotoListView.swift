@@ -11,6 +11,7 @@ struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
     @ObservedObject private var session = SessionManager.shared
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
     @State private var completionResult: FusionCompletionResult?
@@ -157,6 +158,28 @@ struct PhotoListView: View {
     }
     
     private var gridView: some View {
+        GeometryReader { proxy in
+            if usesLibraryWorkspace(for: proxy.size.width) {
+                HStack(spacing: 0) {
+                    librarySidebar
+                        .frame(width: 256)
+
+                    Divider()
+
+                    libraryContent(isWorkspace: true)
+                }
+            } else {
+                libraryContent(isWorkspace: false)
+            }
+        }
+        .background(AppColors.canvas)
+    }
+
+    private func usesLibraryWorkspace(for width: CGFloat) -> Bool {
+        horizontalSizeClass == .regular && width >= 820
+    }
+
+    private func libraryContent(isWorkspace: Bool) -> some View {
         let visiblePhotos = filteredPhotos
 
         return ScrollView {
@@ -175,27 +198,115 @@ struct PhotoListView: View {
 
                 if visiblePhotos.isEmpty {
                     emptyFilteredView
-                }
+                } else if isWorkspace {
+                    PhotoWorkspaceGrid(
+                        photos: visiblePhotos,
+                        onSelect: selectPhoto
+                    )
+                } else {
+                    ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
+                        let photos = photos(for: format, in: visiblePhotos)
 
-                ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
-                    let photos = photos(for: format, in: visiblePhotos)
-
-                    if !photos.isEmpty {
-                        PhotoFormatSection(
-                            title: format.title,
-                            format: format,
-                            photos: photos,
-                            onSelect: selectPhoto
-                        )
+                        if !photos.isEmpty {
+                            PhotoFormatSection(
+                                title: format.title,
+                                format: format,
+                                photos: photos,
+                                onSelect: selectPhoto
+                            )
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .padding(.horizontal, isWorkspace ? 24 : 16)
+            .padding(.top, isWorkspace ? 20 : 6)
             .padding(.bottom, 28)
-            .readableContent(maxWidth: 1_000)
+            .frame(maxWidth: isWorkspace ? 1_180 : 1_000, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: isWorkspace ? .leading : .center)
         }
-        .background(AppColors.canvas)
+    }
+
+    private var librarySidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Biblioteca")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Explora por formato")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 6)
+
+                libraryScopeButton(
+                    title: "Todas las fotos",
+                    systemImage: "photo.stack",
+                    isSelected: selectedFormats.isEmpty
+                ) {
+                    selectedFormats = []
+                }
+
+                ForEach(PhotoFormat.filterableCases, id: \.rawValue) { format in
+                    libraryScopeButton(
+                        title: format.title,
+                        systemImage: format.librarySystemImage,
+                        isSelected: selectedFormats == [format]
+                    ) {
+                        selectedFormats = [format]
+                    }
+                }
+
+                Divider()
+                    .padding(.vertical, 6)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShowingFilters.toggle()
+                    }
+                } label: {
+                    Label("Filtros avanzados", systemImage: "slider.horizontal.3")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppColors.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 11)
+                        .background(AppColors.field)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if activeFilterCount > 0 {
+                    StatusBadge(
+                        text: "\(activeFilterCount) filtros activos",
+                        systemImage: "line.3.horizontal.decrease.circle.fill",
+                        tint: AppColors.brand
+                    )
+                }
+            }
+            .padding(16)
+        }
+        .background(AppColors.elevated.opacity(0.58))
+    }
+
+    private func libraryScopeButton(
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isSelected ? AppColors.brand : AppColors.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(isSelected ? AppColors.brand.opacity(0.11) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private var filteredPhotos: [Photo] {
@@ -1037,6 +1148,32 @@ private struct PhotoFormatSection: View {
     }
 }
 
+private struct PhotoWorkspaceGrid: View {
+    let photos: [Photo]
+    let onSelect: (Photo) -> Void
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 172, maximum: 240), spacing: 14, alignment: .top)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+            ForEach(photos) { photo in
+                PhotoCell(
+                    photo: photo,
+                    aspectRatio: photo.format.displayAspectRatio,
+                    onRenderComplete: { _ in }
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onTapGesture {
+                    onSelect(photo)
+                }
+            }
+        }
+        .accessibilityLabel("Galería de fotos")
+    }
+}
+
 private struct PhotoRenderBlock: View {
     let blockIndex: Int
     let format: PhotoFormat
@@ -1365,6 +1502,23 @@ private extension Array {
 
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
+}
+
+private extension PhotoFormat {
+    var librarySystemImage: String {
+        switch self {
+        case .horizontal:
+            return "rectangle"
+        case .square:
+            return "square"
+        case .semiVertical:
+            return "rectangle.portrait"
+        case .vertical:
+            return "rectangle.portrait.fill"
+        case .unknown:
+            return "questionmark.square.dashed"
         }
     }
 }

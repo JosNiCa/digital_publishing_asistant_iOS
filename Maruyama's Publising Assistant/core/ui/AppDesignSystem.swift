@@ -56,7 +56,7 @@ extension View {
 }
 
 struct AdaptiveTwoColumnLayout<Primary: View, Secondary: View>: View {
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private let minimumPrimaryWidth: CGFloat
     private let secondaryWidth: CGFloat
@@ -80,7 +80,7 @@ struct AdaptiveTwoColumnLayout<Primary: View, Secondary: View>: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            if verticalSizeClass != .compact {
+            if horizontalSizeClass == .regular {
                 HStack(alignment: .top, spacing: spacing) {
                     primary
                         .frame(minWidth: minimumPrimaryWidth, maxWidth: .infinity, alignment: .topLeading)

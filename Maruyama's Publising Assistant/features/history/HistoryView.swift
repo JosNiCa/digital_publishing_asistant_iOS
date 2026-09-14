@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedFilter: PublicationFilter = .pendientes
     @State private var selectedPendingItem: FusionItem?
     @State private var itemPendingNetworkDeletion: FusionItem?
@@ -147,6 +148,21 @@ private extension FusionItem {
 private extension HistoryView {
     
     var list: some View {
+        GeometryReader { proxy in
+            if usesHistoryWorkspace(for: proxy.size.width) {
+                historyWorkspace
+            } else {
+                compactList
+            }
+        }
+        .background(AppColors.canvas)
+    }
+
+    func usesHistoryWorkspace(for width: CGFloat) -> Bool {
+        horizontalSizeClass == .regular && width >= 820
+    }
+
+    var compactList: some View {
         VStack(spacing: 14) {
             filterToolbar
             
@@ -158,7 +174,11 @@ private extension HistoryView {
                     if filteredItems.isEmpty {
                         emptyFilteredState
                     } else {
-                        section(title: selectedFilter.sectionTitle, items: filteredItems)
+                        section(
+                            title: selectedFilter.sectionTitle,
+                            items: filteredItems,
+                            rowLayout: .compact
+                        )
                     }
                 }
                 .padding(.horizontal, 10)
@@ -166,7 +186,99 @@ private extension HistoryView {
             }
         }
         .readableContent(maxWidth: 860)
-        .background(AppColors.canvas)
+    }
+
+    var historyWorkspace: some View {
+        HStack(spacing: 0) {
+            historySidebar
+                .frame(width: 256)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    summaryCard
+                    actionMessages
+
+                    if filteredItems.isEmpty {
+                        emptyFilteredState
+                    } else {
+                        section(
+                            title: selectedFilter.sectionTitle,
+                            items: filteredItems,
+                            rowLayout: .workspace
+                        )
+                    }
+                }
+                .padding(24)
+                .padding(.bottom, 28)
+                .frame(maxWidth: 1_120, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    var historySidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Publicaciones")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Revisión por estado")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 6)
+
+                ForEach(PublicationFilter.allCases) { filter in
+                    historyFilterButton(filter)
+                }
+            }
+            .padding(16)
+        }
+        .background(AppColors.elevated.opacity(0.58))
+    }
+
+    func historyFilterButton(_ filter: PublicationFilter) -> some View {
+        Button {
+            selectedFilter = filter
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: filter.emptySystemImage)
+                    .frame(width: 18)
+
+                Text(filter.title)
+
+                Spacer(minLength: 8)
+
+                Text("\(itemCount(for: filter))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(selectedFilter == filter ? AppColors.brand : .secondary)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(selectedFilter == filter ? AppColors.brand : AppColors.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(selectedFilter == filter ? AppColors.brand.opacity(0.11) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    func itemCount(for filter: PublicationFilter) -> Int {
+        switch filter {
+        case .pendientes:
+            return viewModel.pendientes.count
+        case .agendadas:
+            return viewModel.agendadas.count
+        case .publicadas:
+            return viewModel.publicadas.count
+        case .eliminadasRedes:
+            return viewModel.eliminadasRedes.count
+        }
     }
 }
 
@@ -242,7 +354,11 @@ private extension HistoryView {
         .appCard(cornerRadius: 22, padding: 0)
     }
     
-    func section(title: String, items: [FusionItem]) -> some View {
+    func section(
+        title: String,
+        items: [FusionItem],
+        rowLayout: FusionRowLayout
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionEyebrow(title, systemImage: "list.bullet.rectangle")
 
@@ -252,6 +368,7 @@ private extension HistoryView {
                         item: item,
                         isActionable: selectedFilter == .pendientes,
                         isDeleting: viewModel.isDeleting(item),
+                        layout: rowLayout,
                         onDeleteFromNetworks: item.canDeletePost ? {
                             itemPendingNetworkDeletion = item
                         } : nil
@@ -353,93 +470,152 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private enum FusionRowLayout: Equatable {
+    case compact
+    case workspace
+}
+
 private struct FusionRow: View {
-    
     let item: FusionItem
     let isActionable: Bool
     let isDeleting: Bool
+    let layout: FusionRowLayout
     let onDeleteFromNetworks: (() -> Void)?
-    
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
-                switch state {
-                case .loading:
-                    ZStack {
-                        AppColors.field
-                        ProgressView()
-                    }
-                case .success(let image):
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    AppColors.field
-                }
-            }
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.productoNombre)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppColors.ink)
-                    .lineLimit(1)
-                
-                Text(item.distributorName)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                
-                tagRow
-            }
-
-            Spacer(minLength: 8)
-
-            if isActionable, onDeleteFromNetworks == nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 29)
+        Group {
+            switch layout {
+            case .compact:
+                compactRow
+            case .workspace:
+                workspaceRow
             }
         }
-        .padding(10)
+        .padding(layout == .workspace ? 14 : 10)
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
     }
 
-    private var tagRow: some View {
-        HStack(spacing: 5) {
-            HistoryTag(
-                title: formatTagTitle,
-                systemImage: "rectangle.3.group",
-                tint: AppColors.softInk
-            )
+    private var compactRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            thumbnail(size: 70)
+
+            VStack(alignment: .leading, spacing: 6) {
+                publicationDetails(lineLimit: 2)
+                compactMetadata
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var workspaceRow: some View {
+        HStack(alignment: .center, spacing: 16) {
+            thumbnail(size: 78)
+
+            publicationDetails(lineLimit: 1)
+                .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+
+            formatTag
 
             if !item.platforms.isEmpty {
-                HistoryTag(
-                    title: platformTagTitle,
-                    systemImage: "paperplane.fill",
-                    tint: AppColors.brand
-                )
+                platformTag
             }
 
             if let fechaPublicacion = item.fechaPublicacion {
-                HistoryTag(
-                    title: dateTagTitle(fechaPublicacion),
-                    systemImage: "calendar",
-                    tint: AppColors.softInk
-                )
-                .overlay(alignment: .top) {
-                    deleteButton
-                        .offset(y: -45)
+                dateTag(fechaPublicacion)
+            }
+
+            trailingAction
+        }
+    }
+
+    private func thumbnail(size: CGFloat) -> some View {
+        RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+            switch state {
+            case .loading:
+                ZStack {
+                    AppColors.field
+                    ProgressView()
                 }
-            } else {
-                deleteButton
+            case .success(let image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case .failure:
+                AppColors.field
             }
         }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    private func publicationDetails(lineLimit: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.productoNombre)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.ink)
+                .lineLimit(lineLimit)
+
+            Text(item.distributorName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(lineLimit)
+        }
+    }
+
+    private var compactMetadata: some View {
+        HStack(spacing: 5) {
+            formatTag
+
+            if !item.platforms.isEmpty {
+                platformTag
+            }
+
+            if let fechaPublicacion = item.fechaPublicacion {
+                dateTag(fechaPublicacion)
+            }
+
+            trailingAction
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var formatTag: some View {
+        HistoryTag(
+            title: formatTagTitle,
+            systemImage: "rectangle.3.group",
+            tint: AppColors.softInk
+        )
+    }
+
+    private var platformTag: some View {
+        HistoryTag(
+            title: platformTagTitle,
+            systemImage: "paperplane.fill",
+            tint: AppColors.brand
+        )
+    }
+
+    private func dateTag(_ date: Date) -> some View {
+        HistoryTag(
+            title: dateTagTitle(date),
+            systemImage: "calendar",
+            tint: AppColors.softInk
+        )
+    }
+
+    @ViewBuilder
+    private var trailingAction: some View {
+        if let onDeleteFromNetworks {
+            deleteButton
+        } else if isActionable {
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 34, height: 34)
+        }
     }
 
     @ViewBuilder
@@ -513,6 +689,5 @@ private struct HistoryTag: View {
         .frame(height: 28)
         .background(tint.opacity(0.10))
         .clipShape(Capsule())
-        .fixedSize(horizontal: true, vertical: false)
     }
 }

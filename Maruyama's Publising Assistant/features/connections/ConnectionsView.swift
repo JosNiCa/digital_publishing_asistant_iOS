@@ -11,7 +11,9 @@ struct ConnectionsView: View {
 
     @StateObject private var viewModel: ConnectionsViewModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isShowingAccountDeletionConfirmation = false
+    @State private var selectedWorkspaceSection: ConnectionWorkspaceSection = .integrations
 
     init(
         publishingRepository: PublishingRepository,
@@ -26,20 +28,12 @@ struct ConnectionsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-
-                if viewModel.isLoading && viewModel.status == nil {
-                    loadingView
-                } else {
-                    statusContent
-                }
-
-                accountManagementSection
+        GeometryReader { proxy in
+            if usesSettingsWorkspace(for: proxy.size.width) {
+                settingsWorkspace
+            } else {
+                compactContent
             }
-            .padding(16)
-            .readableContent(maxWidth: 720)
         }
         .navigationTitle("Conexión")
         .navigationBarTitleDisplayMode(.large)
@@ -80,6 +74,125 @@ struct ConnectionsView: View {
             }
         } message: {
             Text(viewModel.accountDeletionErrorMessage ?? "")
+        }
+    }
+
+    private func usesSettingsWorkspace(for width: CGFloat) -> Bool {
+        horizontalSizeClass == .regular && width >= 820
+    }
+
+    private var compactContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+
+                if viewModel.isLoading && viewModel.status == nil {
+                    loadingView
+                } else {
+                    statusContent
+                }
+
+                accountManagementSection
+            }
+            .padding(16)
+            .readableContent(maxWidth: 720)
+        }
+    }
+
+    private var settingsWorkspace: some View {
+        HStack(spacing: 0) {
+            settingsSidebar
+                .frame(width: 256)
+
+            Divider()
+
+            ScrollView {
+                workspaceDetail
+                    .padding(24)
+                    .frame(maxWidth: 820, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .background(AppColors.canvas)
+    }
+
+    private var settingsSidebar: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Conexión")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                    Text("Configuración de cuenta")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 6)
+
+                workspaceSidebarButton(
+                    title: "Integraciones",
+                    systemImage: "link",
+                    section: .integrations
+                )
+
+                workspaceSidebarButton(
+                    title: "Cuenta",
+                    systemImage: "person.crop.circle",
+                    section: .account
+                )
+
+                if let status = viewModel.status {
+                    Divider()
+                        .padding(.vertical, 6)
+
+                    StatusBadge(
+                        text: status.isConnected ? "Meta conectado" : "Requiere atención",
+                        systemImage: status.isConnected ? "checkmark.circle.fill" : "exclamationmark.circle.fill",
+                        tint: status.isConnected ? AppColors.positive : AppColors.warning
+                    )
+                }
+            }
+            .padding(16)
+        }
+        .background(AppColors.elevated.opacity(0.58))
+    }
+
+    private func workspaceSidebarButton(
+        title: String,
+        systemImage: String,
+        section: ConnectionWorkspaceSection
+    ) -> some View {
+        Button {
+            selectedWorkspaceSection = section
+        } label: {
+            Label(title, systemImage: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(selectedWorkspaceSection == section ? AppColors.brand : AppColors.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(selectedWorkspaceSection == section ? AppColors.brand.opacity(0.11) : Color.clear)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var workspaceDetail: some View {
+        switch selectedWorkspaceSection {
+        case .integrations:
+            VStack(alignment: .leading, spacing: 16) {
+                header
+
+                if viewModel.isLoading && viewModel.status == nil {
+                    loadingView
+                } else {
+                    statusContent
+                }
+            }
+        case .account:
+            accountManagementSection
         }
     }
 
@@ -279,6 +392,11 @@ struct ConnectionsView: View {
         guard let url = await viewModel.requestAccountDeletionURL() else { return }
         openURL(url)
     }
+}
+
+private enum ConnectionWorkspaceSection {
+    case integrations
+    case account
 }
 
 private struct AccountDeletionRequestButton: View {
