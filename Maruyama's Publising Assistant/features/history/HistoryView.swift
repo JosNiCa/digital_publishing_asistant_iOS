@@ -189,97 +189,32 @@ private extension HistoryView {
     }
 
     var historyWorkspace: some View {
-        HStack(spacing: 0) {
-            historySidebar
-                .frame(width: 256)
-
-            Divider()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 16) {
-                    summaryCard
-                    actionMessages
-
-                    if filteredItems.isEmpty {
-                        emptyFilteredState
-                    } else {
-                        section(
-                            title: selectedFilter.sectionTitle,
-                            items: filteredItems,
-                            rowLayout: .workspace
-                        )
-                    }
-                }
-                .padding(24)
-                .padding(.bottom, 28)
-                .frame(maxWidth: 1_120, alignment: .leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    var historySidebar: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Publicaciones")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(AppColors.ink)
+            LazyVStack(alignment: .leading, spacing: 16) {
+                filterToolbar
+                    .padding(.horizontal, 0)
+                    .padding(.top, 2)
 
-                    Text("Revisión por estado")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 6)
+                summaryCard
+                actionMessages
 
-                ForEach(PublicationFilter.allCases) { filter in
-                    historyFilterButton(filter)
+                if filteredItems.isEmpty {
+                    emptyFilteredState
+                } else {
+                    section(
+                        title: selectedFilter.sectionTitle,
+                        items: filteredItems,
+                        rowLayout: .grid
+                    )
                 }
             }
-            .padding(16)
-        }
-        .background(AppColors.elevated.opacity(0.58))
-    }
-
-    func historyFilterButton(_ filter: PublicationFilter) -> some View {
-        Button {
-            selectedFilter = filter
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: filter.emptySystemImage)
-                    .frame(width: 18)
-
-                Text(filter.title)
-
-                Spacer(minLength: 8)
-
-                Text("\(itemCount(for: filter))")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(selectedFilter == filter ? AppColors.brand : .secondary)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(selectedFilter == filter ? AppColors.brand : AppColors.ink)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 11)
-            .background(selectedFilter == filter ? AppColors.brand.opacity(0.11) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
-    func itemCount(for filter: PublicationFilter) -> Int {
-        switch filter {
-        case .pendientes:
-            return viewModel.pendientes.count
-        case .agendadas:
-            return viewModel.agendadas.count
-        case .publicadas:
-            return viewModel.publicadas.count
-        case .eliminadasRedes:
-            return viewModel.eliminadasRedes.count
+            .padding(24)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 1_180, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
+
 }
 
 private extension HistoryView {
@@ -362,23 +297,42 @@ private extension HistoryView {
         VStack(alignment: .leading, spacing: 10) {
             SectionEyebrow(title, systemImage: "list.bullet.rectangle")
 
-            LazyVStack(spacing: 10) {
-                ForEach(items) { item in
-                    FusionRow(
-                        item: item,
-                        isActionable: selectedFilter == .pendientes,
-                        isDeleting: viewModel.isDeleting(item),
-                        layout: rowLayout,
-                        onDeleteFromNetworks: item.canDeletePost ? {
-                            itemPendingNetworkDeletion = item
-                        } : nil
-                    )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard selectedFilter == .pendientes else { return }
-                            selectedPendingItem = item
-                        }
+            Group {
+                if rowLayout == .grid {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 300), spacing: 14),
+                            GridItem(.flexible(minimum: 300), spacing: 14)
+                        ],
+                        spacing: 14
+                    ) {
+                        fusionRows(items: items, rowLayout: rowLayout)
+                    }
+                } else {
+                    LazyVStack(spacing: 10) {
+                        fusionRows(items: items, rowLayout: rowLayout)
+                    }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func fusionRows(items: [FusionItem], rowLayout: FusionRowLayout) -> some View {
+        ForEach(items) { item in
+            FusionRow(
+                item: item,
+                isActionable: selectedFilter == .pendientes,
+                isDeleting: viewModel.isDeleting(item),
+                layout: rowLayout,
+                onDeleteFromNetworks: item.canDeletePost ? {
+                    itemPendingNetworkDeletion = item
+                } : nil
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard selectedFilter == .pendientes else { return }
+                selectedPendingItem = item
             }
         }
     }
@@ -472,7 +426,7 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
 
 private enum FusionRowLayout: Equatable {
     case compact
-    case workspace
+    case grid
 }
 
 private struct FusionRow: View {
@@ -487,11 +441,11 @@ private struct FusionRow: View {
             switch layout {
             case .compact:
                 compactRow
-            case .workspace:
-                workspaceRow
+            case .grid:
+                gridRow
             }
         }
-        .padding(layout == .workspace ? 14 : 10)
+        .padding(layout == .compact ? 10 : 14)
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
@@ -510,22 +464,23 @@ private struct FusionRow: View {
         }
     }
 
-    private var workspaceRow: some View {
-        HStack(alignment: .center, spacing: 16) {
+    private var gridRow: some View {
+        HStack(alignment: .center, spacing: 14) {
             thumbnail(size: 78)
 
-            publicationDetails(lineLimit: 1)
-                .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 7) {
+                publicationDetails(lineLimit: 1)
 
-            formatTag
+                HStack(spacing: 6) {
+                    formatTag
 
-            if !item.platforms.isEmpty {
-                platformTag
+                    if let fechaPublicacion = item.fechaPublicacion {
+                        dateTag(fechaPublicacion)
+                    }
+                }
             }
 
-            if let fechaPublicacion = item.fechaPublicacion {
-                dateTag(fechaPublicacion)
-            }
+            Spacer(minLength: 0)
 
             trailingAction
         }

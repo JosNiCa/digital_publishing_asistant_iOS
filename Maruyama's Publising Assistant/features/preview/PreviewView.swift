@@ -72,17 +72,24 @@ struct PreviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                header
-                AdaptiveTwoColumnLayout {
-                    contentImage
+                AdaptiveTwoColumnLayout(
+                    minimumPrimaryWidth: 360,
+                    secondaryWidth: 350,
+                    spacing: 18
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+                        contentImage
+                    }
                 } secondary: {
                     publicationControls
                 }
+                actionsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
-            .readableContent(maxWidth: 980)
+            .readableContent(maxWidth: 1_140)
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Preview")
@@ -114,7 +121,6 @@ struct PreviewView: View {
             captionInput
             platformSection
             scheduleSection
-            actionsSection
         }
     }
 }

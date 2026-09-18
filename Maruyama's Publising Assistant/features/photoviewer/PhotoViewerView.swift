@@ -51,7 +51,11 @@ struct PhotoViewerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerSection
-                AdaptiveTwoColumnLayout {
+                AdaptiveTwoColumnLayout(
+                    minimumPrimaryWidth: 360,
+                    secondaryWidth: 340,
+                    spacing: 18
+                ) {
                     imageSection
                 } secondary: {
                     detailControls
@@ -60,7 +64,7 @@ struct PhotoViewerView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
-            .readableContent(maxWidth: 980)
+            .readableContent(maxWidth: 1_140)
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
                    let logoId = viewModel.selectedLogoId,

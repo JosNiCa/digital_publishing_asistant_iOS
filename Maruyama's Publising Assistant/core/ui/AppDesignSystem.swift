@@ -79,7 +79,7 @@ struct AdaptiveTwoColumnLayout<Primary: View, Secondary: View>: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
+        Group {
             if horizontalSizeClass == .regular {
                 HStack(alignment: .top, spacing: spacing) {
                     primary
@@ -88,11 +88,11 @@ struct AdaptiveTwoColumnLayout<Primary: View, Secondary: View>: View {
                     secondary
                         .frame(width: secondaryWidth, alignment: .topLeading)
                 }
-            }
-
-            VStack(alignment: .leading, spacing: spacing) {
-                primary
-                secondary
+            } else {
+                VStack(alignment: .leading, spacing: spacing) {
+                    primary
+                    secondary
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
