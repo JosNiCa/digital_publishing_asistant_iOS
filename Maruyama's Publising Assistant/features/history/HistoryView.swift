@@ -320,19 +320,30 @@ private extension HistoryView {
     @ViewBuilder
     func fusionRows(items: [FusionItem], rowLayout: FusionRowLayout) -> some View {
         ForEach(items) { item in
-            FusionRow(
-                item: item,
-                isActionable: selectedFilter == .pendientes,
-                isDeleting: viewModel.isDeleting(item),
-                layout: rowLayout,
-                onDeleteFromNetworks: item.canDeletePost ? {
-                    itemPendingNetworkDeletion = item
-                } : nil
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                guard selectedFilter == .pendientes else { return }
-                selectedPendingItem = item
+            if selectedFilter == .pendientes, rowLayout == .grid {
+                PendingFusionCard(
+                    item: item,
+                    isPublishing: viewModel.isPublishing(item),
+                    publishingError: viewModel.publishingError(for: item),
+                    onPublish: { caption in
+                        await viewModel.publishPendingFusion(item, caption: caption)
+                    }
+                )
+            } else {
+                FusionRow(
+                    item: item,
+                    isActionable: selectedFilter == .pendientes,
+                    isDeleting: viewModel.isDeleting(item),
+                    layout: rowLayout,
+                    onDeleteFromNetworks: item.canDeletePost ? {
+                        itemPendingNetworkDeletion = item
+                    } : nil
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard selectedFilter == .pendientes else { return }
+                    selectedPendingItem = item
+                }
             }
         }
     }
@@ -622,6 +633,135 @@ private struct FusionRow: View {
 
     private func dateTagTitle(_ date: Date) -> String {
         date.formatted(.dateTime.day().month(.abbreviated))
+    }
+}
+
+private struct PendingFusionCard: View {
+    let item: FusionItem
+    let isPublishing: Bool
+    let publishingError: String?
+    let onPublish: (String) async -> Bool
+
+    @State private var caption: String
+
+    init(
+        item: FusionItem,
+        isPublishing: Bool,
+        publishingError: String?,
+        onPublish: @escaping (String) async -> Bool
+    ) {
+        self.item = item
+        self.isPublishing = isPublishing
+        self.publishingError = publishingError
+        self.onPublish = onPublish
+        _caption = State(initialValue: item.caption ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                thumbnail
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.productoNombre)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.ink)
+                        .lineLimit(2)
+
+                    Text(item.distributorName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        HistoryTag(
+                            title: item.displayFormat,
+                            systemImage: "rectangle.3.group",
+                            tint: AppColors.softInk
+                        )
+
+                        if let platformName = item.platformDisplayName {
+                            HistoryTag(
+                                title: platformName,
+                                systemImage: "paperplane.fill",
+                                tint: AppColors.brand
+                            )
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionEyebrow("Caption", systemImage: "text.quote")
+
+                TextEditor(text: $caption)
+                    .font(.subheadline)
+                    .frame(minHeight: 110, maxHeight: 160)
+                    .padding(8)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.field)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("Caption para \(item.productoNombre)")
+            }
+
+            if let publishingError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(publishingError)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.brand)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.brand.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            Button {
+                Task {
+                    await onPublish(caption)
+                }
+            } label: {
+                Group {
+                    if isPublishing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Publicando...")
+                        }
+                    } else {
+                        Label("Publicar ahora", systemImage: "paperplane.fill")
+                    }
+                }
+            }
+            .buttonStyle(PrimaryCapsuleButtonStyle(isEnabled: !isPublishing))
+            .disabled(isPublishing)
+        }
+        .padding(14)
+        .background(AppColors.elevated)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
+    }
+
+    private var thumbnail: some View {
+        RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+            switch state {
+            case .loading:
+                ZStack {
+                    AppColors.field
+                    ProgressView()
+                }
+            case .success(let image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case .failure:
+                AppColors.field
+            }
+        }
+        .frame(width: 84, height: 84)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
     }
 }
 

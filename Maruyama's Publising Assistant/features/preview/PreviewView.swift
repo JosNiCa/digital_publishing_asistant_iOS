@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+private struct PreviewImageHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat?
+
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
+    }
+}
+
 enum FusionCompletionResult: Equatable {
     case saved
     case published
@@ -38,6 +46,7 @@ enum FusionCompletionResult: Equatable {
 struct PreviewView: View {
 
     @StateObject private var viewModel: PreviewViewModel
+    @State private var displayedImageHeight: CGFloat?
     private let onComplete: @MainActor (FusionCompletionResult) -> Void
     private let onBackgroundPublishStarted: @MainActor () -> Void
     private let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
@@ -95,6 +104,9 @@ struct PreviewView: View {
         .navigationTitle("Preview")
         .navigationBarTitleDisplayMode(.inline)
         .appScreenBackground()
+        .onPreferenceChange(PreviewImageHeightPreferenceKey.self) { height in
+            displayedImageHeight = height
+        }
         .task {
             await viewModel.loadFusionDetailIfNeeded()
         }
@@ -231,6 +243,14 @@ private extension PreviewView {
             }
         }
         .frame(maxWidth: .infinity)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: PreviewImageHeightPreferenceKey.self,
+                    value: proxy.size.height
+                )
+            }
+        }
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 18, x: 0, y: 8)
@@ -261,6 +281,7 @@ private extension PreviewView {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .appCard(cornerRadius: 22, padding: 16)
+        .frame(maxHeight: displayedImageHeight)
     }
 }
 

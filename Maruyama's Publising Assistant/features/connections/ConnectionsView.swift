@@ -14,6 +14,7 @@ struct ConnectionsView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isShowingAccountDeletionConfirmation = false
     @State private var selectedWorkspaceSection: ConnectionWorkspaceSection = .integrations
+    @State private var isShowingSettingsSidebar = false
 
     init(
         publishingRepository: PublishingRepository,
@@ -39,6 +40,21 @@ struct ConnectionsView: View {
         .navigationBarTitleDisplayMode(.large)
         .appScreenBackground()
         .toolbar {
+            if horizontalSizeClass == .regular {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingSettingsSidebar.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .accessibilityLabel(
+                        isShowingSettingsSidebar ? "Cerrar opciones de conexión" : "Mostrar opciones de conexión"
+                    )
+                }
+            }
+
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task {
@@ -100,35 +116,69 @@ struct ConnectionsView: View {
     }
 
     private var settingsWorkspace: some View {
-        HStack(spacing: 0) {
-            settingsSidebar
-                .frame(width: 256)
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                workspaceContent
 
-            Divider()
+                if isShowingSettingsSidebar {
+                    Color.black.opacity(0.14)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingSettingsSidebar = false
+                            }
+                        }
+                        .transition(.opacity)
 
-            ScrollView {
-                workspaceDetail
-                    .padding(24)
-                    .frame(maxWidth: 820, alignment: .leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    settingsSidebar(width: min(340, max(280, proxy.size.width * 0.86)))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
             }
+            .animation(.easeInOut(duration: 0.2), value: isShowingSettingsSidebar)
         }
         .background(AppColors.canvas)
     }
 
-    private var settingsSidebar: some View {
+    private var workspaceContent: some View {
+        ScrollView {
+            workspaceDetail
+                .padding(24)
+                .frame(maxWidth: 820, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func settingsSidebar(width: CGFloat) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Conexión")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(AppColors.ink)
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Conexión")
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(AppColors.ink)
 
-                    Text("Configuración de cuenta")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        Text("Configuración de cuenta")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingSettingsSidebar = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(AppColors.ink)
+                            .frame(width: 36, height: 36)
+                            .background(AppColors.field)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cerrar opciones de conexión")
                 }
-                .padding(.bottom, 6)
 
                 workspaceSidebarButton(
                     title: "Integraciones",
@@ -155,7 +205,9 @@ struct ConnectionsView: View {
             }
             .padding(16)
         }
-        .background(AppColors.elevated.opacity(0.58))
+        .frame(minWidth: width, maxWidth: width, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.elevated)
+        .shadow(color: .black.opacity(0.12), radius: 18, x: 8, y: 0)
     }
 
     private func workspaceSidebarButton(
@@ -165,6 +217,9 @@ struct ConnectionsView: View {
     ) -> some View {
         Button {
             selectedWorkspaceSection = section
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isShowingSettingsSidebar = false
+            }
         } label: {
             Label(title, systemImage: systemImage)
                 .font(.subheadline.weight(.semibold))

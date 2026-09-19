@@ -91,7 +91,16 @@ struct PhotoListView: View {
                 )
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingFilters.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .accessibilityLabel(isShowingFilters ? "Cerrar filtros" : "Mostrar filtros avanzados")
+
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isShowingSearch.toggle()
@@ -101,7 +110,6 @@ struct PhotoListView: View {
                         }
                     } label: {
                         Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                            .foregroundStyle(AppColors.brand)
                     }
                     .accessibilityLabel("Buscar fotos")
                 }
@@ -159,18 +167,26 @@ struct PhotoListView: View {
     
     private var gridView: some View {
         GeometryReader { proxy in
-            if usesLibraryWorkspace(for: proxy.size.width) {
-                HStack(spacing: 0) {
-                    librarySidebar
-                        .frame(width: 256)
+            let isWorkspace = usesLibraryWorkspace(for: proxy.size.width)
 
-                    Divider()
+            ZStack(alignment: .leading) {
+                libraryContent(isWorkspace: isWorkspace)
 
-                    libraryContent(isWorkspace: true)
+                if isShowingFilters {
+                    Color.black.opacity(0.14)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingFilters = false
+                            }
+                        }
+                        .transition(.opacity)
+
+                    filtersSidebar(width: min(340, max(280, proxy.size.width * 0.86)))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
-            } else {
-                libraryContent(isWorkspace: false)
             }
+            .animation(.easeInOut(duration: 0.2), value: isShowingFilters)
         }
         .background(AppColors.canvas)
     }
@@ -191,10 +207,6 @@ struct PhotoListView: View {
                 }
 
                 filterHeader(visibleCount: visiblePhotos.count)
-
-                if isShowingFilters {
-                    filterPanel
-                }
 
                 if visiblePhotos.isEmpty {
                     emptyFilteredView
@@ -222,60 +234,42 @@ struct PhotoListView: View {
             .padding(.top, isWorkspace ? 20 : 6)
             .padding(.bottom, 28)
             .frame(maxWidth: isWorkspace ? 1_180 : 1_000, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: isWorkspace ? .leading : .center)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
-    private var librarySidebar: some View {
+    private func filtersSidebar(width: CGFloat) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Biblioteca")
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Filtros avanzados")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(AppColors.ink)
 
-                    Text("Explora por formato")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 6)
-
-                libraryScopeButton(
-                    title: "Todas las fotos",
-                    systemImage: "photo.stack",
-                    isSelected: selectedFormats.isEmpty
-                ) {
-                    selectedFormats = []
-                }
-
-                ForEach(PhotoFormat.filterableCases, id: \.rawValue) { format in
-                    libraryScopeButton(
-                        title: format.title,
-                        systemImage: format.librarySystemImage,
-                        isSelected: selectedFormats == [format]
-                    ) {
-                        selectedFormats = [format]
+                        Text("Refina la biblioteca sin perder de vista tus fotos.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }
 
-                Divider()
-                    .padding(.vertical, 6)
+                    Spacer(minLength: 8)
 
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isShowingFilters.toggle()
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingFilters = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(AppColors.ink)
+                            .frame(width: 36, height: 36)
+                            .background(AppColors.field)
+                            .clipShape(Circle())
                     }
-                } label: {
-                    Label("Filtros avanzados", systemImage: "slider.horizontal.3")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppColors.ink)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 11)
-                        .background(AppColors.field)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cerrar filtros")
                 }
-                .buttonStyle(.plain)
 
                 if activeFilterCount > 0 {
                     StatusBadge(
@@ -284,29 +278,14 @@ struct PhotoListView: View {
                         tint: AppColors.brand
                     )
                 }
+
+                advancedFilterControls
             }
             .padding(16)
         }
-        .background(AppColors.elevated.opacity(0.58))
-    }
-
-    private func libraryScopeButton(
-        title: String,
-        systemImage: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(isSelected ? AppColors.brand : AppColors.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background(isSelected ? AppColors.brand.opacity(0.11) : Color.clear)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(.plain)
+        .frame(minWidth: width, maxWidth: width, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.elevated)
+        .shadow(color: .black.opacity(0.12), radius: 18, x: 8, y: 0)
     }
 
     private var filteredPhotos: [Photo] {
@@ -396,23 +375,9 @@ struct PhotoListView: View {
 
     private func filterHeader(visibleCount: Int) -> some View {
         HStack(spacing: 12) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isShowingFilters.toggle()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isShowingFilters ? "slider.horizontal.3" : "line.3.horizontal.decrease.circle")
-                    Text("Filtros")
-                }
+            Label("Biblioteca", systemImage: "photo.stack")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppColors.ink)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(AppColors.elevated)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
 
             if activeFilterCount > 0 {
                 StatusBadge(
@@ -562,7 +527,7 @@ struct PhotoListView: View {
         .appCard(cornerRadius: 22, padding: 16)
     }
 
-    private var filterPanel: some View {
+    private var advancedFilterControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             Picker("Orden", selection: $sortOrder) {
                 ForEach(PhotoSortOrder.allCases) { order in
@@ -712,7 +677,6 @@ struct PhotoListView: View {
                 .font(.caption.weight(.semibold))
             }
         }
-        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var activeFilterCount: Int {
