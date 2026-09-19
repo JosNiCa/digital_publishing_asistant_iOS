@@ -7,6 +7,14 @@
 
 import SwiftUI
 
+private struct PreviewImageHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat?
+
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
+    }
+}
+
 enum FusionCompletionResult: Equatable {
     case saved
     case published
@@ -38,14 +46,19 @@ enum FusionCompletionResult: Equatable {
 struct PreviewView: View {
 
     @StateObject private var viewModel: PreviewViewModel
+    @State private var displayedImageHeight: CGFloat?
     private let onComplete: @MainActor (FusionCompletionResult) -> Void
     private let onBackgroundPublishStarted: @MainActor () -> Void
     private let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
 
     init(
         input: PreviewInput,
         fusionRepository: FusionRepository,
         publishingRepository: PublishingRepository,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter,
         onComplete: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in },
         onBackgroundPublishStarted: @escaping @MainActor () -> Void = {},
         onBackgroundPublishFinished: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
@@ -53,11 +66,14 @@ struct PreviewView: View {
         self.onComplete = onComplete
         self.onBackgroundPublishStarted = onBackgroundPublishStarted
         self.onBackgroundPublishFinished = onBackgroundPublishFinished
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         _viewModel = StateObject(
             wrappedValue: PreviewViewModel(
                 input: input,
                 fusionRepository: fusionRepository,
-                publishingRepository: publishingRepository
+                publishingRepository: publishingRepository,
+                fusionSession: fusionSession
             )
         )
     }
@@ -65,20 +81,32 @@ struct PreviewView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                header
-                contentImage
-                captionInput
-                platformSection
-                scheduleSection
+                AdaptiveTwoColumnLayout(
+                    minimumPrimaryWidth: 360,
+                    secondaryWidth: 350,
+                    spacing: 18
+                ) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+                        contentImage
+                    }
+                } secondary: {
+                    publicationControls
+                }
                 actionsSection
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
+            .readableContent(maxWidth: 1_140)
         }
+        .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Preview")
         .navigationBarTitleDisplayMode(.inline)
         .appScreenBackground()
+        .onPreferenceChange(PreviewImageHeightPreferenceKey.self) { height in
+            displayedImageHeight = height
+        }
         .task {
             await viewModel.loadFusionDetailIfNeeded()
         }
@@ -99,6 +127,14 @@ struct PreviewView: View {
         }
         .appCard(cornerRadius: 22, padding: 16)
     }
+
+    var publicationControls: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            captionInput
+            platformSection
+            scheduleSection
+        }
+    }
 }
 
 private extension PreviewView {
@@ -109,7 +145,10 @@ private extension PreviewView {
             VStack(alignment: .leading, spacing: 12) {
                 SectionEyebrow("Plataformas", systemImage: "square.grid.2x2.fill")
 
-                HStack(spacing: 10) {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 138), spacing: 10)],
+                    spacing: 10
+                ) {
                     ForEach(viewModel.platforms) { platform in
                         Button {
                             viewModel.togglePlatform(platform)
@@ -204,6 +243,14 @@ private extension PreviewView {
             }
         }
         .frame(maxWidth: .infinity)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: PreviewImageHeightPreferenceKey.self,
+                    value: proxy.size.height
+                )
+            }
+        }
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .shadow(color: .black.opacity(0.06), radius: 18, x: 0, y: 8)
@@ -234,6 +281,7 @@ private extension PreviewView {
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .appCard(cornerRadius: 22, padding: 16)
+        .frame(maxHeight: displayedImageHeight)
     }
 }
 
@@ -315,7 +363,7 @@ private extension PreviewView {
         guard viewModel.canStartPublishing() else { return }
 
         let result: FusionCompletionResult = viewModel.scheduledDate == nil ? .published : .scheduled
-        let activity = PublishingActivityCenter.shared
+        let activity = publishingActivity
         let publisher = viewModel
 
         activity.begin(isScheduled: result == .scheduled)

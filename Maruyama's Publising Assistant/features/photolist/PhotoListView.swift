@@ -11,6 +11,7 @@ struct PhotoListView: View {
     
     @StateObject private var viewModel: PhotoListViewModel
     @ObservedObject private var session = SessionManager.shared
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedPhoto: Photo?
     @State private var showLogoutConfirm: Bool = false
     @State private var completionResult: FusionCompletionResult?
@@ -36,9 +37,17 @@ struct PhotoListView: View {
     private let distributorRepository: DistributorRepositoryImpl
     private let fusionRepository: FusionRepositoryImpl
     private let publishingRepository: PublishingRepositoryImpl
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
         
-    init(photoListViewModel: PhotoListViewModel) {
+    init(
+        photoListViewModel: PhotoListViewModel,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter
+    ) {
         _viewModel = StateObject(wrappedValue: photoListViewModel)
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         let apiClient = APIClient()
         self.apiClient = apiClient
         self.distributorRepository = DistributorRepositoryImpl(apiClient: apiClient)
@@ -47,87 +56,95 @@ struct PhotoListView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Fotos")
-                .navigationBarTitleDisplayMode(.large)
-                .appScreenBackground()
-                .task {
-                    await viewModel.loadPhotos()
-                }
-                .refreshable {
-                    await viewModel.refresh()
-                }
-                .navigationDestination(item: $selectedPhoto) { photo in
-                    PhotoViewerView(
-                        photo: photo,
-                        distributorRepository: distributorRepository,
-                        fusionRepository: fusionRepository,
-                        publishingRepository: publishingRepository,
-                        onFusionCompleted: { result in
-                            FusionSession.shared.clear()
-                            completionResult = result
-                            selectedPhoto = nil
-                        },
-                        onBackgroundPublishStarted: {
-                            selectedPhoto = nil
-                        },
-                        onBackgroundPublishFinished: { _ in
-                            FusionSession.shared.clear()
-                            Task {
-                                await viewModel.refresh()
-                            }
+        content
+            .navigationTitle("Fotos")
+            .navigationBarTitleDisplayMode(.large)
+            .appScreenBackground()
+            .task {
+                await viewModel.loadPhotos()
+            }
+            .refreshable {
+                await viewModel.refresh()
+            }
+            .navigationDestination(item: $selectedPhoto) { photo in
+                PhotoViewerView(
+                    photo: photo,
+                    distributorRepository: distributorRepository,
+                    fusionRepository: fusionRepository,
+                    publishingRepository: publishingRepository,
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity,
+                    onFusionCompleted: { result in
+                        fusionSession.clear()
+                        completionResult = result
+                        selectedPhoto = nil
+                    },
+                    onBackgroundPublishStarted: {
+                        selectedPhoto = nil
+                    },
+                    onBackgroundPublishFinished: { _ in
+                        fusionSession.clear()
+                        Task {
+                            await viewModel.refresh()
                         }
-                    )
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isShowingSearch.toggle()
-                            }
-                            if isShowingSearch {
-                                isSearchFocused = true
-                            }
-                        } label: {
-                            Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                                .foregroundStyle(AppColors.brand)
-                        }
-                        .accessibilityLabel("Buscar fotos")
                     }
+                )
+            }
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingFilters.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "sidebar.left")
+                    }
+                    .accessibilityLabel(isShowingFilters ? "Cerrar filtros" : "Mostrar filtros avanzados")
 
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            showLogoutConfirm = true
-                        } label: {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundStyle(AppColors.brand)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingSearch.toggle()
                         }
-                        .accessibilityLabel("Cerrar sesión")
+                        if isShowingSearch {
+                            isSearchFocused = true
+                        }
+                    } label: {
+                        Image(systemName: isShowingSearch ? "magnifyingglass.circle.fill" : "magnifyingglass")
                     }
+                    .accessibilityLabel("Buscar fotos")
                 }
-                .alert("Cerrar sesión", isPresented: $showLogoutConfirm) {
-                    Button("Cancelar", role: .cancel) {}
-                    Button("Cerrar sesión", role: .destructive) {
-                        SessionManager.shared.logout()
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showLogoutConfirm = true
+                    } label: {
+                        Image(systemName: "rectangle.portrait.and.arrow.right")
+                            .foregroundStyle(AppColors.brand)
                     }
-                } message: {
-                    Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
+                    .accessibilityLabel("Cerrar sesión")
                 }
-                .alert(
-                    completionResult?.title ?? "",
-                    isPresented: Binding(
-                        get: { completionResult != nil },
-                        set: { if !$0 { completionResult = nil } }
-                    )
-                ) {
-                    Button("Entendido", role: .cancel) {
-                        completionResult = nil
-                    }
-                } message: {
-                    Text(completionResult?.message ?? "")
+            }
+            .alert("Cerrar sesión", isPresented: $showLogoutConfirm) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Cerrar sesión", role: .destructive) {
+                    SessionManager.shared.logout()
                 }
-        }
+            } message: {
+                Text("Se borrarán las credenciales y tendrás que iniciar sesión de nuevo.")
+            }
+            .alert(
+                completionResult?.title ?? "",
+                isPresented: Binding(
+                    get: { completionResult != nil },
+                    set: { if !$0 { completionResult = nil } }
+                )
+            ) {
+                Button("Entendido", role: .cancel) {
+                    completionResult = nil
+                }
+            } message: {
+                Text(completionResult?.message ?? "")
+            }
     }
     
     @ViewBuilder
@@ -148,12 +165,37 @@ struct PhotoListView: View {
         }
     }
     
-    private let compactColumns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
-    
     private var gridView: some View {
+        GeometryReader { proxy in
+            let isWorkspace = usesLibraryWorkspace(for: proxy.size.width)
+
+            ZStack(alignment: .leading) {
+                libraryContent(isWorkspace: isWorkspace)
+
+                if isShowingFilters {
+                    Color.black.opacity(0.14)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isShowingFilters = false
+                            }
+                        }
+                        .transition(.opacity)
+
+                    filtersSidebar(width: min(340, max(280, proxy.size.width * 0.86)))
+                        .transition(.move(edge: .leading).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: isShowingFilters)
+        }
+        .background(AppColors.canvas)
+    }
+
+    private func usesLibraryWorkspace(for width: CGFloat) -> Bool {
+        horizontalSizeClass == .regular && width >= 820
+    }
+
+    private func libraryContent(isWorkspace: Bool) -> some View {
         let visiblePhotos = filteredPhotos
 
         return ScrollView {
@@ -166,33 +208,84 @@ struct PhotoListView: View {
 
                 filterHeader(visibleCount: visiblePhotos.count)
 
-                if isShowingFilters {
-                    filterPanel
-                }
-
                 if visiblePhotos.isEmpty {
                     emptyFilteredView
-                }
+                } else if isWorkspace {
+                    PhotoWorkspaceGrid(
+                        photos: visiblePhotos,
+                        onSelect: selectPhoto
+                    )
+                } else {
+                    ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
+                        let photos = photos(for: format, in: visiblePhotos)
 
-                ForEach(PhotoFormat.allCases, id: \.rawValue) { format in
-                    let photos = photos(for: format, in: visiblePhotos)
-
-                    if !photos.isEmpty {
-                        PhotoFormatSection(
-                            title: format.title,
-                            format: format,
-                            photos: photos,
-                            compactColumns: compactColumns,
-                            onSelect: selectPhoto
-                        )
+                        if !photos.isEmpty {
+                            PhotoFormatSection(
+                                title: format.title,
+                                format: format,
+                                photos: photos,
+                                onSelect: selectPhoto
+                            )
+                        }
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .padding(.horizontal, isWorkspace ? 24 : 16)
+            .padding(.top, isWorkspace ? 20 : 6)
             .padding(.bottom, 28)
+            .frame(maxWidth: isWorkspace ? 1_180 : 1_000, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
-        .background(AppColors.canvas)
+    }
+
+    private func filtersSidebar(width: CGFloat) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Filtros avanzados")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(AppColors.ink)
+
+                        Text("Refina la biblioteca sin perder de vista tus fotos.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isShowingFilters = false
+                        }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(AppColors.ink)
+                            .frame(width: 36, height: 36)
+                            .background(AppColors.field)
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Cerrar filtros")
+                }
+
+                if activeFilterCount > 0 {
+                    StatusBadge(
+                        text: "\(activeFilterCount) filtros activos",
+                        systemImage: "line.3.horizontal.decrease.circle.fill",
+                        tint: AppColors.brand
+                    )
+                }
+
+                advancedFilterControls
+            }
+            .padding(16)
+        }
+        .frame(minWidth: width, maxWidth: width, maxHeight: .infinity, alignment: .topLeading)
+        .background(AppColors.elevated)
+        .shadow(color: .black.opacity(0.12), radius: 18, x: 8, y: 0)
     }
 
     private var filteredPhotos: [Photo] {
@@ -282,23 +375,9 @@ struct PhotoListView: View {
 
     private func filterHeader(visibleCount: Int) -> some View {
         HStack(spacing: 12) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    isShowingFilters.toggle()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: isShowingFilters ? "slider.horizontal.3" : "line.3.horizontal.decrease.circle")
-                    Text("Filtros")
-                }
+            Label("Biblioteca", systemImage: "photo.stack")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppColors.ink)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(AppColors.elevated)
-                .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
 
             if activeFilterCount > 0 {
                 StatusBadge(
@@ -448,7 +527,7 @@ struct PhotoListView: View {
         .appCard(cornerRadius: 22, padding: 16)
     }
 
-    private var filterPanel: some View {
+    private var advancedFilterControls: some View {
         VStack(alignment: .leading, spacing: 14) {
             Picker("Orden", selection: $sortOrder) {
                 ForEach(PhotoSortOrder.allCases) { order in
@@ -598,7 +677,6 @@ struct PhotoListView: View {
                 .font(.caption.weight(.semibold))
             }
         }
-        .appCard(cornerRadius: 22, padding: 16)
     }
 
     private var activeFilterCount: Int {
@@ -1004,7 +1082,6 @@ private struct PhotoFormatSection: View {
     let title: String
     let format: PhotoFormat
     let photos: [Photo]
-    let compactColumns: [GridItem]
     let onSelect: (Photo) -> Void
 
     var body: some View {
@@ -1023,35 +1100,41 @@ private struct PhotoFormatSection: View {
                 Spacer()
             }
 
-            if format == .horizontal {
-                LazyVStack(spacing: 10) {
-                    ForEach(Array(photos.chunked(into: 5).enumerated()), id: \.offset) { index, blockPhotos in
-                        PhotoRenderBlock(
-                            blockIndex: index,
-                            format: format,
-                            photos: blockPhotos,
-                            compactColumns: compactColumns,
-                            onSelect: onSelect
-                        )
-                        .id(blockPhotos.map(\.id))
-                    }
-                }
-            } else {
-                LazyVStack(spacing: 10) {
-                    ForEach(Array(photos.chunked(into: 4).enumerated()), id: \.offset) { index, blockPhotos in
-                        PhotoRenderBlock(
-                            blockIndex: index,
-                            format: format,
-                            photos: blockPhotos,
-                            compactColumns: compactColumns,
-                            onSelect: onSelect
-                        )
-                        .id(blockPhotos.map(\.id))
-                    }
+            PhotoRenderBlock(
+                blockIndex: 0,
+                format: format,
+                photos: photos,
+                onSelect: onSelect
+            )
+            .id(photos.map(\.id))
+        }
+        .padding(.top, 2)
+    }
+}
+
+private struct PhotoWorkspaceGrid: View {
+    let photos: [Photo]
+    let onSelect: (Photo) -> Void
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 172, maximum: 240), spacing: 14, alignment: .top)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+            ForEach(photos) { photo in
+                PhotoCell(
+                    photo: photo,
+                    aspectRatio: photo.format.displayAspectRatio,
+                    onRenderComplete: { _ in }
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onTapGesture {
+                    onSelect(photo)
                 }
             }
         }
-        .padding(.top, 2)
+        .accessibilityLabel("Galería de fotos")
     }
 }
 
@@ -1059,7 +1142,6 @@ private struct PhotoRenderBlock: View {
     let blockIndex: Int
     let format: PhotoFormat
     let photos: [Photo]
-    let compactColumns: [GridItem]
     let onSelect: (Photo) -> Void
 
     @State private var loadedPhotoIDs: Set<Int> = []
@@ -1075,6 +1157,18 @@ private struct PhotoRenderBlock: View {
 
     private var photoIDs: [Int] {
         photos.map(\.id)
+    }
+
+    private var gridColumns: [GridItem] {
+        let minimumWidth = format == .horizontal ? 240.0 : 150.0
+        let maximumWidth = format == .horizontal ? 320.0 : 220.0
+
+        return [
+            GridItem(
+                .adaptive(minimum: minimumWidth, maximum: maximumWidth),
+                spacing: 10
+            )
+        ]
     }
 
     var body: some View {
@@ -1106,40 +1200,15 @@ private struct PhotoRenderBlock: View {
 
     @ViewBuilder
     private var blockContent: some View {
-        if format == .horizontal {
-            LazyVStack(spacing: 10) {
-                ForEach(photos) { photo in
-                    PhotoCell(
-                        photo: photo,
-                        aspectRatio: format.displayAspectRatio,
-                        onRenderComplete: markLoaded
-                    )
-                    .onTapGesture {
-                        onSelect(photo)
-                    }
-                }
-            }
-        } else {
-            LazyVStack(spacing: 10) {
-                ForEach(Array(photos.chunked(into: 2).enumerated()), id: \.offset) { _, rowPhotos in
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(rowPhotos) { photo in
-                            PhotoCell(
-                                photo: photo,
-                                aspectRatio: format.displayAspectRatio,
-                                onRenderComplete: markLoaded
-                            )
-                            .onTapGesture {
-                                onSelect(photo)
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-
-                        if rowPhotos.count == 1 {
-                            Spacer(minLength: 0)
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
+        LazyVGrid(columns: gridColumns, spacing: 10) {
+            ForEach(photos) { photo in
+                PhotoCell(
+                    photo: photo,
+                    aspectRatio: format.displayAspectRatio,
+                    onRenderComplete: markLoaded
+                )
+                .onTapGesture {
+                    onSelect(photo)
                 }
             }
         }
@@ -1397,6 +1466,23 @@ private extension Array {
 
         return stride(from: 0, to: count, by: size).map {
             Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
+}
+
+private extension PhotoFormat {
+    var librarySystemImage: String {
+        switch self {
+        case .horizontal:
+            return "rectangle"
+        case .square:
+            return "square"
+        case .semiVertical:
+            return "rectangle.portrait"
+        case .vertical:
+            return "rectangle.portrait.fill"
+        case .unknown:
+            return "questionmark.square.dashed"
         }
     }
 }

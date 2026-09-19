@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @StateObject private var viewModel: HistoryViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var selectedFilter: PublicationFilter = .pendientes
     @State private var selectedPendingItem: FusionItem?
     @State private var itemPendingNetworkDeletion: FusionItem?
@@ -16,14 +17,20 @@ struct HistoryView: View {
     
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
     
     init(
         mediaRepository: MediaRepository,
         fusionRepository: FusionRepository,
-        publishingRepository: PublishingRepository
+        publishingRepository: PublishingRepository,
+        fusionSession: FusionSession,
+        publishingActivity: PublishingActivityCenter
     ) {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         
         _viewModel = StateObject(
             wrappedValue: HistoryViewModel(
@@ -34,36 +41,36 @@ struct HistoryView: View {
     }
     
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle("Publicaciones")
-                .navigationBarTitleDisplayMode(.large)
-                .appScreenBackground()
-                .navigationDestination(item: $selectedPendingItem) { item in
-                    PreviewView(
-                        input: item.previewInput,
-                        fusionRepository: fusionRepository,
-                        publishingRepository: publishingRepository,
-                        onComplete: { result in
-                            FusionSession.shared.clear()
-                            completionResult = result
-                            selectedPendingItem = nil
-                            Task {
-                                await viewModel.loadFusions()
-                            }
-                        },
-                        onBackgroundPublishStarted: {
-                            selectedPendingItem = nil
-                        },
-                        onBackgroundPublishFinished: { _ in
-                            FusionSession.shared.clear()
-                            Task {
-                                await viewModel.loadFusions()
-                            }
+        content
+            .navigationTitle("Publicaciones")
+            .navigationBarTitleDisplayMode(.large)
+            .appScreenBackground()
+            .navigationDestination(item: $selectedPendingItem) { item in
+                PreviewView(
+                    input: item.previewInput,
+                    fusionRepository: fusionRepository,
+                    publishingRepository: publishingRepository,
+                    fusionSession: fusionSession,
+                    publishingActivity: publishingActivity,
+                    onComplete: { result in
+                        fusionSession.clear()
+                        completionResult = result
+                        selectedPendingItem = nil
+                        Task {
+                            await viewModel.loadFusions()
                         }
-                    )
-                }
-        }
+                    },
+                    onBackgroundPublishStarted: {
+                        selectedPendingItem = nil
+                    },
+                    onBackgroundPublishFinished: { _ in
+                        fusionSession.clear()
+                        Task {
+                            await viewModel.loadFusions()
+                        }
+                    }
+                )
+            }
         .alert(
             completionResult?.title ?? "",
             isPresented: Binding(
@@ -141,6 +148,21 @@ private extension FusionItem {
 private extension HistoryView {
     
     var list: some View {
+        GeometryReader { proxy in
+            if usesHistoryWorkspace(for: proxy.size.width) {
+                historyWorkspace
+            } else {
+                compactList
+            }
+        }
+        .background(AppColors.canvas)
+    }
+
+    func usesHistoryWorkspace(for width: CGFloat) -> Bool {
+        horizontalSizeClass == .regular && width >= 820
+    }
+
+    var compactList: some View {
         VStack(spacing: 14) {
             filterToolbar
             
@@ -152,15 +174,47 @@ private extension HistoryView {
                     if filteredItems.isEmpty {
                         emptyFilteredState
                     } else {
-                        section(title: selectedFilter.sectionTitle, items: filteredItems)
+                        section(
+                            title: selectedFilter.sectionTitle,
+                            items: filteredItems,
+                            rowLayout: .compact
+                        )
                     }
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 28)
             }
         }
-        .background(AppColors.canvas)
+        .readableContent(maxWidth: 860)
     }
+
+    var historyWorkspace: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                filterToolbar
+                    .padding(.horizontal, 0)
+                    .padding(.top, 2)
+
+                summaryCard
+                actionMessages
+
+                if filteredItems.isEmpty {
+                    emptyFilteredState
+                } else {
+                    section(
+                        title: selectedFilter.sectionTitle,
+                        items: filteredItems,
+                        rowLayout: .grid
+                    )
+                }
+            }
+            .padding(24)
+            .padding(.bottom, 28)
+            .frame(maxWidth: 1_180, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
 }
 
 private extension HistoryView {
@@ -235,25 +289,60 @@ private extension HistoryView {
         .appCard(cornerRadius: 22, padding: 0)
     }
     
-    func section(title: String, items: [FusionItem]) -> some View {
+    func section(
+        title: String,
+        items: [FusionItem],
+        rowLayout: FusionRowLayout
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionEyebrow(title, systemImage: "list.bullet.rectangle")
 
-            LazyVStack(spacing: 10) {
-                ForEach(items) { item in
-                    FusionRow(
-                        item: item,
-                        isActionable: selectedFilter == .pendientes,
-                        isDeleting: viewModel.isDeleting(item),
-                        onDeleteFromNetworks: item.canDeletePost ? {
-                            itemPendingNetworkDeletion = item
-                        } : nil
-                    )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            guard selectedFilter == .pendientes else { return }
-                            selectedPendingItem = item
-                        }
+            Group {
+                if rowLayout == .grid {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(minimum: 300), spacing: 14),
+                            GridItem(.flexible(minimum: 300), spacing: 14)
+                        ],
+                        spacing: 14
+                    ) {
+                        fusionRows(items: items, rowLayout: rowLayout)
+                    }
+                } else {
+                    LazyVStack(spacing: 10) {
+                        fusionRows(items: items, rowLayout: rowLayout)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func fusionRows(items: [FusionItem], rowLayout: FusionRowLayout) -> some View {
+        ForEach(items) { item in
+            if selectedFilter == .pendientes, rowLayout == .grid {
+                PendingFusionCard(
+                    item: item,
+                    isPublishing: viewModel.isPublishing(item),
+                    publishingError: viewModel.publishingError(for: item),
+                    onPublish: { caption in
+                        await viewModel.publishPendingFusion(item, caption: caption)
+                    }
+                )
+            } else {
+                FusionRow(
+                    item: item,
+                    isActionable: selectedFilter == .pendientes,
+                    isDeleting: viewModel.isDeleting(item),
+                    layout: rowLayout,
+                    onDeleteFromNetworks: item.canDeletePost ? {
+                        itemPendingNetworkDeletion = item
+                    } : nil
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    guard selectedFilter == .pendientes else { return }
+                    selectedPendingItem = item
                 }
             }
         }
@@ -346,93 +435,153 @@ private enum PublicationFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private enum FusionRowLayout: Equatable {
+    case compact
+    case grid
+}
+
 private struct FusionRow: View {
-    
     let item: FusionItem
     let isActionable: Bool
     let isDeleting: Bool
+    let layout: FusionRowLayout
     let onDeleteFromNetworks: (() -> Void)?
-    
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
-                switch state {
-                case .loading:
-                    ZStack {
-                        AppColors.field
-                        ProgressView()
-                    }
-                case .success(let image):
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    AppColors.field
-                }
-            }
-            .frame(width: 70, height: 70)
-            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-            
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.productoNombre)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppColors.ink)
-                    .lineLimit(1)
-                
-                Text(item.distributorName)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                
-                tagRow
-            }
-
-            Spacer(minLength: 8)
-
-            if isActionable, onDeleteFromNetworks == nil {
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 29)
+        Group {
+            switch layout {
+            case .compact:
+                compactRow
+            case .grid:
+                gridRow
             }
         }
-        .padding(10)
+        .padding(layout == .compact ? 10 : 14)
         .background(AppColors.elevated)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
     }
 
-    private var tagRow: some View {
+    private var compactRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            thumbnail(size: 70)
+
+            VStack(alignment: .leading, spacing: 6) {
+                publicationDetails(lineLimit: 2)
+                compactMetadata
+            }
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var gridRow: some View {
+        HStack(alignment: .center, spacing: 14) {
+            thumbnail(size: 78)
+
+            VStack(alignment: .leading, spacing: 7) {
+                publicationDetails(lineLimit: 1)
+
+                HStack(spacing: 6) {
+                    formatTag
+
+                    if let fechaPublicacion = item.fechaPublicacion {
+                        dateTag(fechaPublicacion)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            trailingAction
+        }
+    }
+
+    private func thumbnail(size: CGFloat) -> some View {
+        RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+            switch state {
+            case .loading:
+                ZStack {
+                    AppColors.field
+                    ProgressView()
+                }
+            case .success(let image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case .failure:
+                AppColors.field
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    private func publicationDetails(lineLimit: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.productoNombre)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppColors.ink)
+                .lineLimit(lineLimit)
+
+            Text(item.distributorName)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(lineLimit)
+        }
+    }
+
+    private var compactMetadata: some View {
         HStack(spacing: 5) {
-            HistoryTag(
-                title: formatTagTitle,
-                systemImage: "rectangle.3.group",
-                tint: AppColors.softInk
-            )
+            formatTag
 
             if !item.platforms.isEmpty {
-                HistoryTag(
-                    title: platformTagTitle,
-                    systemImage: "paperplane.fill",
-                    tint: AppColors.brand
-                )
+                platformTag
             }
 
             if let fechaPublicacion = item.fechaPublicacion {
-                HistoryTag(
-                    title: dateTagTitle(fechaPublicacion),
-                    systemImage: "calendar",
-                    tint: AppColors.softInk
-                )
-                .overlay(alignment: .top) {
-                    deleteButton
-                        .offset(y: -45)
-                }
-            } else {
-                deleteButton
+                dateTag(fechaPublicacion)
             }
+
+            trailingAction
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var formatTag: some View {
+        HistoryTag(
+            title: formatTagTitle,
+            systemImage: "rectangle.3.group",
+            tint: AppColors.softInk
+        )
+    }
+
+    private var platformTag: some View {
+        HistoryTag(
+            title: platformTagTitle,
+            systemImage: "paperplane.fill",
+            tint: AppColors.brand
+        )
+    }
+
+    private func dateTag(_ date: Date) -> some View {
+        HistoryTag(
+            title: dateTagTitle(date),
+            systemImage: "calendar",
+            tint: AppColors.softInk
+        )
+    }
+
+    @ViewBuilder
+    private var trailingAction: some View {
+        if let onDeleteFromNetworks {
+            deleteButton
+        } else if isActionable {
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.tertiary)
+                .frame(width: 34, height: 34)
+        }
     }
 
     @ViewBuilder
@@ -487,6 +636,135 @@ private struct FusionRow: View {
     }
 }
 
+private struct PendingFusionCard: View {
+    let item: FusionItem
+    let isPublishing: Bool
+    let publishingError: String?
+    let onPublish: (String) async -> Bool
+
+    @State private var caption: String
+
+    init(
+        item: FusionItem,
+        isPublishing: Bool,
+        publishingError: String?,
+        onPublish: @escaping (String) async -> Bool
+    ) {
+        self.item = item
+        self.isPublishing = isPublishing
+        self.publishingError = publishingError
+        self.onPublish = onPublish
+        _caption = State(initialValue: item.caption ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                thumbnail
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.productoNombre)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppColors.ink)
+                        .lineLimit(2)
+
+                    Text(item.distributorName)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    HStack(spacing: 6) {
+                        HistoryTag(
+                            title: item.displayFormat,
+                            systemImage: "rectangle.3.group",
+                            tint: AppColors.softInk
+                        )
+
+                        if let platformName = item.platformDisplayName {
+                            HistoryTag(
+                                title: platformName,
+                                systemImage: "paperplane.fill",
+                                tint: AppColors.brand
+                            )
+                        }
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionEyebrow("Caption", systemImage: "text.quote")
+
+                TextEditor(text: $caption)
+                    .font(.subheadline)
+                    .frame(minHeight: 110, maxHeight: 160)
+                    .padding(8)
+                    .scrollContentBackground(.hidden)
+                    .background(AppColors.field)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityLabel("Caption para \(item.productoNombre)")
+            }
+
+            if let publishingError {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                    Text(publishingError)
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.brand)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(AppColors.brand.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            Button {
+                Task {
+                    await onPublish(caption)
+                }
+            } label: {
+                Group {
+                    if isPublishing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Publicando...")
+                        }
+                    } else {
+                        Label("Publicar ahora", systemImage: "paperplane.fill")
+                    }
+                }
+            }
+            .buttonStyle(PrimaryCapsuleButtonStyle(isEnabled: !isPublishing))
+            .disabled(isPublishing)
+        }
+        .padding(14)
+        .background(AppColors.elevated)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: .black.opacity(0.04), radius: 12, x: 0, y: 6)
+    }
+
+    private var thumbnail: some View {
+        RetryingRemoteImage(url: item.thumbnailUrl.resolvedMediaURL, maxRetries: 1) { state, _ in
+            switch state {
+            case .loading:
+                ZStack {
+                    AppColors.field
+                    ProgressView()
+                }
+            case .success(let image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case .failure:
+                AppColors.field
+            }
+        }
+        .frame(width: 84, height: 84)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+}
+
 private struct HistoryTag: View {
     let title: String
     let systemImage: String
@@ -506,6 +784,5 @@ private struct HistoryTag: View {
         .frame(height: 28)
         .background(tint.opacity(0.10))
         .clipShape(Capsule())
-        .fixedSize(horizontal: true, vertical: false)
     }
 }

@@ -10,8 +10,6 @@ import Combine
 @MainActor
 final class FusionSession: ObservableObject {
 
-    static let shared = FusionSession()
-
     @Published var fusionId: Int?
     @Published var photoId: Int?
     @Published var logoId: Int?

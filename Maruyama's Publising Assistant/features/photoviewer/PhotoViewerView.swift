@@ -14,6 +14,8 @@ struct PhotoViewerView: View {
     
     private let fusionRepository: FusionRepository
     private let publishingRepository: PublishingRepository
+    private let fusionSession: FusionSession
+    private let publishingActivity: PublishingActivityCenter
     private let onFusionCompleted: @MainActor (FusionCompletionResult) -> Void
     private let onBackgroundPublishStarted: @MainActor () -> Void
     private let onBackgroundPublishFinished: @MainActor (FusionCompletionResult) -> Void
@@ -22,12 +24,16 @@ struct PhotoViewerView: View {
          distributorRepository: DistributorRepository,
          fusionRepository: FusionRepository,
          publishingRepository: PublishingRepository,
+         fusionSession: FusionSession,
+         publishingActivity: PublishingActivityCenter,
          onFusionCompleted: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in },
          onBackgroundPublishStarted: @escaping @MainActor () -> Void = {},
          onBackgroundPublishFinished: @escaping @MainActor (FusionCompletionResult) -> Void = { _ in }
     ) {
         self.fusionRepository = fusionRepository
         self.publishingRepository = publishingRepository
+        self.fusionSession = fusionSession
+        self.publishingActivity = publishingActivity
         self.onFusionCompleted = onFusionCompleted
         self.onBackgroundPublishStarted = onBackgroundPublishStarted
         self.onBackgroundPublishFinished = onBackgroundPublishFinished
@@ -45,20 +51,26 @@ struct PhotoViewerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerSection
-                imageSection
-                distributorSection
-                coordinateSection
-                previewAction
+                AdaptiveTwoColumnLayout(
+                    minimumPrimaryWidth: 360,
+                    secondaryWidth: 340,
+                    spacing: 18
+                ) {
+                    imageSection
+                } secondary: {
+                    detailControls
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 28)
+            .readableContent(maxWidth: 1_140)
             .navigationDestination(isPresented: $viewModel.shouldNavigateToPreview) {
                 if let imageBase64 = viewModel.fusionImageBase64,
                    let logoId = viewModel.selectedLogoId,
                    let coordinate = viewModel.selectedCoordinate {
                     
-                    let sessionFusionId = FusionSession.shared.fusionId(
+                    let sessionFusionId = fusionSession.fusionId(
                         matchingPhotoId: viewModel.photo.id,
                         logoId: logoId,
                         coordinate: coordinate
@@ -77,6 +89,8 @@ struct PhotoViewerView: View {
                         input: input,
                         fusionRepository: fusionRepository,
                         publishingRepository: publishingRepository,
+                        fusionSession: fusionSession,
+                        publishingActivity: publishingActivity,
                         onComplete: onFusionCompleted,
                         onBackgroundPublishStarted: onBackgroundPublishStarted,
                         onBackgroundPublishFinished: onBackgroundPublishFinished
@@ -95,9 +109,9 @@ struct PhotoViewerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .appScreenBackground()
         .task {
-            if FusionSession.shared.photoId != nil,
-               FusionSession.shared.photoId != viewModel.photo.id {
-                FusionSession.shared.clear()
+            if fusionSession.photoId != nil,
+               fusionSession.photoId != viewModel.photo.id {
+                fusionSession.clear()
             }
             await viewModel.loadDistributors()
         }
@@ -160,6 +174,14 @@ struct PhotoViewerView: View {
                     viewModel.selectedCoordinate != nil
             )
         )
+    }
+
+    private var detailControls: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            distributorSection
+            coordinateSection
+            previewAction
+        }
     }
     
     private var imageSection: some View {

@@ -18,9 +18,12 @@ final class HistoryViewModel: ObservableObject {
     
     @Published var isLoading = false
     @Published var deletingFusionId: Int?
+    @Published var publishingFusionId: Int?
     @Published var errorMessage: String?
     @Published var actionErrorMessage: String?
     @Published var successMessage: String?
+
+    private var lastPublishingErrorFusionId: Int?
     
     private let mediaRepository: MediaRepository
     private let publishingRepository: PublishingRepository
@@ -75,5 +78,88 @@ final class HistoryViewModel: ObservableObject {
 
     func isDeleting(_ item: FusionItem) -> Bool {
         deletingFusionId == item.id
+    }
+
+    func publishPendingFusion(_ item: FusionItem, caption: String) async -> Bool {
+        guard publishingFusionId == nil else { return false }
+
+        let trimmedCaption = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedCaption.isEmpty else {
+            lastPublishingErrorFusionId = item.id
+            actionErrorMessage = "El caption no puede estar vacío."
+            return false
+        }
+
+        publishingFusionId = item.id
+        lastPublishingErrorFusionId = nil
+        actionErrorMessage = nil
+        successMessage = nil
+
+        defer {
+            publishingFusionId = nil
+        }
+
+        do {
+            let connection = try await publishingRepository.verifyConnection()
+
+            guard connection.isConnected else {
+                throw APIError.serverError(
+                    code: nil,
+                    message: "No hay conexión con Facebook/Instagram."
+                )
+            }
+
+            if let connectionMessage = missingConnectionMessage(
+                for: connection,
+                platforms: item.platforms
+            ) {
+                throw APIError.serverError(code: nil, message: connectionMessage)
+            }
+
+            try await publishingRepository.publishFusion(
+                fusionId: item.id,
+                caption: trimmedCaption,
+                scheduledTime: nil,
+                platforms: requestedPlatformKeys(for: item)
+            )
+
+            successMessage = "Publicación enviada correctamente."
+            await loadFusions()
+            return true
+        } catch {
+            lastPublishingErrorFusionId = item.id
+            actionErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func isPublishing(_ item: FusionItem) -> Bool {
+        publishingFusionId == item.id
+    }
+
+    func publishingError(for item: FusionItem) -> String? {
+        lastPublishingErrorFusionId == item.id ? actionErrorMessage : nil
+    }
+
+    private func requestedPlatformKeys(for item: FusionItem) -> [String]? {
+        guard item.platforms.count > 1 else { return nil }
+        return item.platforms.map(\.key)
+    }
+
+    private func missingConnectionMessage(
+        for connection: ConnectionStatus,
+        platforms: [PublishingPlatform]
+    ) -> String? {
+        let keys = Set(platforms.map { $0.key.lowercased() })
+
+        if keys.contains("facebook"), !connection.facebookConnected {
+            return "Facebook no está conectado para este distribuidor."
+        }
+
+        if keys.contains("instagram"), !connection.instagramConnected {
+            return "Instagram no está conectado para este distribuidor."
+        }
+
+        return nil
     }
 }
